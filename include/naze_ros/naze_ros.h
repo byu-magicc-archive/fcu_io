@@ -67,7 +67,8 @@ private:
   bool getRC();
   bool calibrateIMU();
 
-  uint16_t mapPercentToRC(double percent_command);
+  int mapPercentToRC(double percent_command);
+  int sat(int input, int min, int max);
 };
 
 } // namespace naze_ros

@@ -15,7 +15,7 @@ nazeROS::nazeROS() :
   nh_private_.param<int>("max_PWM_output", max_PWM_output_, 2000);
   nh_private_.param<double>("max_roll", max_roll_, 45.0*M_PI/180.0);
   nh_private_.param<double>("max_pitch", max_pitch_, 45.0*M_PI/180.0);
-  nh_private_.param<double>("max_yaw_rate", max_yaw_rate_, M_PI/180.0);
+  nh_private_.param<double>("max_yaw_rate", max_yaw_rate_, M_PI);
   nh_private_.param<double>("max_throttle", max_throttle_, 74.0);
   nh_private_.param<std::string>("imu_frame_id", imu_frame_id_, "shredder/base/Imu");
   nh_private_.param<double>("imu_pub_rate", imu_pub_rate, 100.0);
@@ -31,7 +31,7 @@ nazeROS::nazeROS() :
 
   // Set up Callbacks
   Command_subscriber_ = nh_.subscribe("command", 1, &nazeROS::RPYCallback, this);
-//  imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0d/imu_pub_rate), &nazeROS::imuCallback, this);
+  imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0d/imu_pub_rate), &nazeROS::imuCallback, this);
   rc_send_timer_ = nh_.createTimer(ros::Duration(1.0d/rc_send_rate), &nazeROS::rcCallback, this);
 
   // setup publishers
@@ -75,17 +75,21 @@ nazeROS::~nazeROS(){
 
 void nazeROS::RPYCallback(const relative_nav_msgs::CommandConstPtr &msg)
 {
-  rc_commands_[RC_AIL] = mapPercentToRC(msg->roll/max_roll_);
-  rc_commands_[RC_ELE] = mapPercentToRC(msg->pitch/max_pitch_);
-  rc_commands_[RC_THR] = mapPercentToRC(msg->roll/max_throttle_);
-  rc_commands_[RC_RUD] = mapPercentToRC(msg->roll/max_roll_);
+  int aux1(0.0), aux2(0.0), aux3(0.0), aux4(0.0);
+  rc_commands_[RC_AIL] = (u_int16_t)sat(mapPercentToRC((msg->roll/max_roll_)+0.5d), min_PWM_output_, max_PWM_output_);
+  rc_commands_[RC_ELE] = (u_int16_t)sat(mapPercentToRC((msg->pitch/max_pitch_)+0.5d), min_PWM_output_, max_PWM_output_);
+  rc_commands_[RC_THR] = (u_int16_t)sat(mapPercentToRC((msg->thrust/max_throttle_)), min_PWM_output_, max_PWM_output_);
+  rc_commands_[RC_RUD] = (u_int16_t)sat(mapPercentToRC((msg->yaw_rate/max_yaw_rate_)+0.5d), min_PWM_output_, max_PWM_output_);
+  rc_commands_[RC_AUX1] = (u_int16_t)sat(mapPercentToRC(aux1), min_PWM_output_, max_PWM_output_);
+  rc_commands_[RC_AUX2] = (u_int16_t)sat(mapPercentToRC(aux2), min_PWM_output_, max_PWM_output_);
+  rc_commands_[RC_AUX3] = (u_int16_t)sat(mapPercentToRC(aux3), min_PWM_output_, max_PWM_output_);
+  rc_commands_[RC_AUX4] = (u_int16_t)sat(mapPercentToRC(aux4), min_PWM_output_, max_PWM_output_);
 }
 
 
 void nazeROS::imuCallback(const ros::TimerEvent& event)
 {
-  if(!getImu())
-  {
+  if(!getImu()){
     ROS_ERROR_STREAM("IMU receive error");
   }
 }
@@ -93,8 +97,7 @@ void nazeROS::imuCallback(const ros::TimerEvent& event)
 
 void nazeROS::rcCallback(const ros::TimerEvent& event)
 {
-  if(!sendRC())
-  {
+  if(!sendRC()){
     ROS_ERROR_STREAM("RC Send Error");
   }
 }
@@ -107,11 +110,11 @@ bool nazeROS::calibrateIMU()
 
 bool nazeROS::sendRC()
 {
-//  SetRawRC outgoing_rc_commands;
-//  for(int i=0; i<8; i++){
-//    outgoing_rc_commands.rcData[i] = rc_commands_[i];
-//  }
-//  MSP_->setRawRC(outgoing_rc_commands);
+  SetRawRC outgoing_rc_commands;
+  for(int i=0; i<8; i++){
+    outgoing_rc_commands.rcData[i] = rc_commands_[i];
+  }
+  MSP_->setRawRC(outgoing_rc_commands);
   return getRC();
 }
 
@@ -149,9 +152,20 @@ bool nazeROS::getImu()
 }
 
 
-uint16_t nazeROS::mapPercentToRC(double percent_command)
+int nazeROS::mapPercentToRC(double percent_command)
 {
-  percent_command*(max_PWM_output_-min_PWM_output_) + min_PWM_output_;
+  int output =  (int)round(percent_command*(max_PWM_output_-min_PWM_output_)) + min_PWM_output_;
+//  ROS_INFO_STREAM("input " << percent_command << " output " << output);
+}
+
+int nazeROS::sat(int input, int min, int max){
+  int output(input);
+  if(input > max){
+    output = max;
+  }else if(input < min){
+    output = min;
+  }
+  return output;
 }
 
 } // namespace naze_ros
