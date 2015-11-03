@@ -64,8 +64,10 @@ private:
   // Functions
   bool getImu();
   bool sendRC();
+  bool getRC();
+  bool calibrateIMU();
+
   uint16_t mapPercentToRC(double percent_command);
-  template<class T>  bool get(T& t);
 };
 
 } // namespace naze_ros

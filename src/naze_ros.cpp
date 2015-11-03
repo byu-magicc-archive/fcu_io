@@ -15,11 +15,11 @@ nazeROS::nazeROS() :
   nh_private_.param<int>("max_PWM_output", max_PWM_output_, 2000);
   nh_private_.param<double>("max_roll", max_roll_, 45.0*M_PI/180.0);
   nh_private_.param<double>("max_pitch", max_pitch_, 45.0*M_PI/180.0);
-  nh_private_.param<double>("max_yaw_rate", max_yaw_rate_, 45.0*M_PI/180.0);
-  nh_private_.param<double>("max_throttle", max_throttle_, 55.0);
+  nh_private_.param<double>("max_yaw_rate", max_yaw_rate_, M_PI/180.0);
+  nh_private_.param<double>("max_throttle", max_throttle_, 74.0);
   nh_private_.param<std::string>("imu_frame_id", imu_frame_id_, "shredder/base/Imu");
   nh_private_.param<double>("imu_pub_rate", imu_pub_rate, 100.0);
-  nh_private_.param<double>("rc_send_rate", rc_send_rate, 50.0);
+  nh_private_.param<double>("rc_send_rate", rc_send_rate, 1.0);
   nh_private_.param<std::string>("serial_port", serial_port, "/dev/ttyUSB0");
   nh_private_.param<int>("baudrate", baudrate, 115200);
   nh_private_.param<double>("timeout", timeout_, 10);
@@ -31,8 +31,8 @@ nazeROS::nazeROS() :
 
   // Set up Callbacks
   Command_subscriber_ = nh_.subscribe("command", 1, &nazeROS::RPYCallback, this);
-  imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0d/imu_pub_rate), &nazeROS::imuCallback, this);
-//  rc_send_timer_ = nh_.createTimer(ros::Duration(1.0d/rc_send_rate), &nazeROS::rcCallback, this);
+//  imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0d/imu_pub_rate), &nazeROS::imuCallback, this);
+  rc_send_timer_ = nh_.createTimer(ros::Duration(1.0d/rc_send_rate), &nazeROS::rcCallback, this);
 
   // setup publishers
   Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
@@ -60,6 +60,12 @@ nazeROS::nazeROS() :
 
   Imu_.angular_velocity_covariance = ang_covariance;
   Imu_.linear_acceleration_covariance = lin_covariance;
+
+  if(calibrateIMU()){
+    ROS_INFO("IMU calibration successful");
+  }else{
+    ROS_ERROR("IMU calibration unsuccessful");
+  }
 }
 
 nazeROS::~nazeROS(){
@@ -85,45 +91,40 @@ void nazeROS::imuCallback(const ros::TimerEvent& event)
 }
 
 
-//void nazeROS::rcCallback(const ros::TimerEvent& event)
-//{
-//  if(!sendRC())
-//  {
-//    ROS_ERROR_STREAM("RC Send Error");
-//  }
-//}
+void nazeROS::rcCallback(const ros::TimerEvent& event)
+{
+  if(!sendRC())
+  {
+    ROS_ERROR_STREAM("RC Send Error");
+  }
+}
+
+bool nazeROS::calibrateIMU()
+{
+  MSP_->calibrateIMU();
+}
 
 
-//bool nazeROS::sendRC()
-//{
+bool nazeROS::sendRC()
+{
 //  SetRawRC outgoing_rc_commands;
-//  RC received_rc_commands;
-//  memset(&outgoing_rc_commands, 0, sizeof(outgoing_rc_commands));
-//  memset(&received_rc_commands, 0, sizeof(received_rc_commands));
-
-//  // send new commands down the wire
-//  for(int i = 0; i<8; i++){
-//   outgoing_rc_commands.rcData[i] = rc_commands_[i];
+//  for(int i=0; i<8; i++){
+//    outgoing_rc_commands.rcData[i] = rc_commands_[i];
 //  }
-////  MSP_.send(outgoing_rc_commands);
-//  ros::Time t_sent = ros::Time::now();
+//  MSP_->setRawRC(outgoing_rc_commands);
+  return getRC();
+}
 
-//  bool received(false);
-//  bool timeout_flag(false);
-//  while(!received && !timeout_flag)
-//  {
-//      get<RC>(received_rc_commands);
-//      received = true;
-//      for(int i=0; i<8;i++){
-//        if(received_rc_commands.rcData[i] != outgoing_rc_commands.rcData[i])
-//          received = false;
-//      }
-//      if((ros::Time::now() - t_sent).toSec() > timeout_){
-//        timeout_flag = true;
-//      }
-//  }
-//  return !timeout_flag || received;
-//}
+bool nazeROS::getRC()
+{
+  RC actual_rc_commands;
+  bool success = MSP_->getRC(actual_rc_commands);
+  ROS_INFO_STREAM("RC Commands:");
+  for(int i=0; i<8; i++){
+    ROS_INFO_STREAM("i: = " << actual_rc_commands.rcData[i]);
+  }
+  return true;
+}
 
 
 bool nazeROS::getImu()
