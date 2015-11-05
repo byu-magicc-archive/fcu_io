@@ -31,8 +31,8 @@ nazeROS::nazeROS() :
 
   // Set up Callbacks
   Command_subscriber_ = nh_.subscribe("command", 1, &nazeROS::RPYCallback, this);
-  imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0d/imu_pub_rate), &nazeROS::imuCallback, this);
-  rc_send_timer_ = nh_.createTimer(ros::Duration(1.0d/rc_send_rate), &nazeROS::rcCallback, this);
+  imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0/imu_pub_rate), &nazeROS::imuCallback, this);
+  rc_send_timer_ = nh_.createTimer(ros::Duration(1.0/rc_send_rate), &nazeROS::rcCallback, this);
 
   // setup publishers
   Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
@@ -51,12 +51,12 @@ nazeROS::nazeROS() :
   Imu_.header.frame_id = imu_frame_id_;
   // accel noise is 400 ug's
   // gyro noise is 0.05 deg/s
-  boost::array<double,9> lin_covariance = { {0.0004d, 0.0d, 0.0d,
-                                             0.0d, 0.0004d, 0.0d,
-                                             0.0d, 0.0d, 0.0004d} };
-  boost::array<double,9> ang_covariance = { {0.05*M_PI/180.0, 0.0d, 0.0d,
-                                             0.0d, 0.05*M_PI/180.0, 0.0d,
-                                             0.0d, 0.0d, 0.05*M_PI/180.0} };
+  boost::array<double,9> lin_covariance = { {0.0004, 0.0, 0.0,
+                                             0.0, 0.0004, 0.0,
+                                             0.0, 0.0, 0.0004} };
+  boost::array<double,9> ang_covariance = { {0.05*M_PI/180.0, 0.0, 0.0,
+                                             0.0, 0.05*M_PI/180.0, 0.0,
+                                             0.0, 0.0, 0.05*M_PI/180.0} };
 
   Imu_.angular_velocity_covariance = ang_covariance;
   Imu_.linear_acceleration_covariance = lin_covariance;
@@ -76,10 +76,10 @@ nazeROS::~nazeROS(){
 void nazeROS::RPYCallback(const relative_nav_msgs::CommandConstPtr &msg)
 {
   int aux1(0.0), aux2(0.0), aux3(0.0), aux4(0.0);
-  rc_commands_[RC_AIL] = (u_int16_t)sat(mapPercentToRC((msg->roll/max_roll_)+0.5d), min_PWM_output_, max_PWM_output_);
-  rc_commands_[RC_ELE] = (u_int16_t)sat(mapPercentToRC((msg->pitch/max_pitch_)+0.5d), min_PWM_output_, max_PWM_output_);
+  rc_commands_[RC_AIL] = (u_int16_t)sat(mapPercentToRC((msg->roll/max_roll_)+0.5), min_PWM_output_, max_PWM_output_);
+  rc_commands_[RC_ELE] = (u_int16_t)sat(mapPercentToRC((msg->pitch/max_pitch_)+0.5), min_PWM_output_, max_PWM_output_);
   rc_commands_[RC_THR] = (u_int16_t)sat(mapPercentToRC((msg->thrust/max_throttle_)), min_PWM_output_, max_PWM_output_);
-  rc_commands_[RC_RUD] = (u_int16_t)sat(mapPercentToRC((msg->yaw_rate/max_yaw_rate_)+0.5d), min_PWM_output_, max_PWM_output_);
+  rc_commands_[RC_RUD] = (u_int16_t)sat(mapPercentToRC((msg->yaw_rate/max_yaw_rate_)+0.5), min_PWM_output_, max_PWM_output_);
   rc_commands_[RC_AUX1] = (u_int16_t)sat(mapPercentToRC(aux1), min_PWM_output_, max_PWM_output_);
   rc_commands_[RC_AUX2] = (u_int16_t)sat(mapPercentToRC(aux2), min_PWM_output_, max_PWM_output_);
   rc_commands_[RC_AUX3] = (u_int16_t)sat(mapPercentToRC(aux3), min_PWM_output_, max_PWM_output_);
@@ -137,9 +137,9 @@ bool nazeROS::getImu()
 
   bool received = MSP_->getRawIMU(receivedIMUdata);
   if(received){
-    Imu_.linear_acceleration.x = (double)receivedIMUdata.accx/512.0;
-    Imu_.linear_acceleration.y = (double)receivedIMUdata.accy/512.0;
-    Imu_.linear_acceleration.z = (double)receivedIMUdata.accz/512.0;
+    Imu_.linear_acceleration.x = (double)receivedIMUdata.accx/512.0*9.80665;
+    Imu_.linear_acceleration.y = (double)receivedIMUdata.accy/512.0*9.80665;
+    Imu_.linear_acceleration.z = (double)receivedIMUdata.accz/512.0*9.80665;
     Imu_.angular_velocity.x = (double)receivedIMUdata.gyrx*4.096/180.0*M_PI;
     Imu_.angular_velocity.y = (double)receivedIMUdata.gyry*4.096/180.0*M_PI;
     Imu_.angular_velocity.z = (double)receivedIMUdata.gyrz*4.096/180.0*M_PI;
