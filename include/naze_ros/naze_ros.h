@@ -55,6 +55,9 @@ private:
 
   // Local Variables
   uint16_t rc_commands_[8];
+  uint16_t center_sticks_[4];
+  uint16_t max_sticks_[4];
+  uint16_t min_sticks_[4];
   RC updated_rc_commands;
   SetRawRC outgoing_rc_commands;
   sensor_msgs::Imu Imu_;
@@ -66,8 +69,9 @@ private:
   bool sendRC();
   bool getRC();
   bool calibrateIMU();
+  bool calibrateRC();
+  bool loadRCFromParam();
 
-  int mapPercentToRC(double percent_command);
   int sat(int input, int min, int max);
 };
 
