@@ -4,6 +4,7 @@
 #include <ros/ros.h>
 #include <relative_nav_msgs/Command.h>
 #include <sensor_msgs/Imu.h>
+#include <std_msgs/Bool.h>
 
 #include "serial/msp.h"
 #include "serial/mspdata.h"
@@ -14,8 +15,8 @@
 #define RC_RUD 3
 #define RC_AUX1 4
 #define RC_AUX2 5
-#define RC_AUX3 6
-#define RC_AUX4 7
+#define RC_ARM 6
+#define RC_ACRO 7
 
 namespace naze_ros
 {
@@ -30,6 +31,8 @@ public:
   void imuCallback(const ros::TimerEvent& event);
   void rcCallback(const ros::TimerEvent& event);
   void RPYCallback(const relative_nav_msgs::CommandConstPtr &msg);
+  void calibrationCallback(const std_msgs::BoolConstPtr &msg);
+  void armCallback(const std_msgs::BoolConstPtr &msg);
 
 private:
 
@@ -39,7 +42,9 @@ private:
 
   // Publishers and Subscribers
   ros::Subscriber Command_subscriber_;
-  ros::Publisher Imu_publisher_; 
+  ros::Subscriber RC_calibration_subscriber_;
+  ros::Subscriber arm_subscriber_;
+  ros::Publisher Imu_publisher_;
   ros::Timer imu_pub_timer_;
   ros::Timer rc_send_timer_;
 
@@ -50,19 +55,16 @@ private:
   double max_pitch_;
   double max_yaw_rate_;
   double max_throttle_;
-  std::string imu_frame_id_;
-  double timeout_;
 
   // Local Variables
-  uint16_t rc_commands_[8];
-  uint16_t center_sticks_[4];
-  uint16_t max_sticks_[4];
-  uint16_t min_sticks_[4];
-  RC updated_rc_commands;
-  SetRawRC outgoing_rc_commands;
+  std::vector<uint16_t> rc_commands_;
+  std::vector<uint16_t> center_sticks_;
+  std::vector<uint16_t> max_sticks_;
+  std::vector<uint16_t> min_sticks_;
   sensor_msgs::Imu Imu_;
-
   MSP* MSP_;
+  bool armed_;
+  bool acro_;
 
   // Functions
   bool getImu();

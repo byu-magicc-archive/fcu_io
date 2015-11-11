@@ -8,47 +8,49 @@ nazeROS::nazeROS() :
   nh_private_(ros::NodeHandle("~"))
 {
   // retrieve params
-  double imu_pub_rate, rc_send_rate;
-  std::string serial_port;
+  double imu_pub_rate, rc_send_rate, dtimeout;
+  std::string serial_port, imu_frame_id;
   int baudrate;
   nh_private_.param<int>("min_PWM_output", min_PWM_output_, 1000);
   nh_private_.param<int>("max_PWM_output", max_PWM_output_, 2000);
-  nh_private_.param<double>("max_roll", max_roll_, 45.0*M_PI/180.0);
-  nh_private_.param<double>("max_pitch", max_pitch_, 45.0*M_PI/180.0);
+  nh_private_.param<double>("max_roll", max_roll_, 25.0*M_PI/180.0);
+  nh_private_.param<double>("max_pitch", max_pitch_, 25.0*M_PI/180.0);
   nh_private_.param<double>("max_yaw_rate", max_yaw_rate_, M_PI);
   nh_private_.param<double>("max_throttle", max_throttle_, 74.0);
-  nh_private_.param<std::string>("imu_frame_id", imu_frame_id_, "shredder/base/Imu");
+  nh_private_.param<std::string>("imu_frame_id", imu_frame_id, "shredder/base/Imu");
   nh_private_.param<double>("imu_pub_rate", imu_pub_rate, 100.0);
   nh_private_.param<double>("rc_send_rate", rc_send_rate, 1.0);
   nh_private_.param<std::string>("serial_port", serial_port, "/dev/ttyUSB0");
-  nh_private_.param<int>("baudrate", baudrate, 230400);
-  nh_private_.param<double>("timeout", timeout_, 10);
+  nh_private_.param<int>("baudrate", baudrate, 115200);
+  nh_private_.param<double>("timeout", dtimeout, 10);
 
 
   // connect serial port
-  serial::Timeout timeout = serial::Timeout::simpleTimeout(timeout_);
+  serial::Timeout timeout = serial::Timeout::simpleTimeout(dtimeout);
   MSP_ = new MSP(serial_port, (u_int32_t)baudrate, timeout);
 
   // Set up Callbacks
   Command_subscriber_ = nh_.subscribe("command", 1, &nazeROS::RPYCallback, this);
+  RC_calibration_subscriber_ = nh_.subscribe("calibrate", 1, &nazeROS::calibrationCallback, this);
+  arm_subscriber_ = nh_.subscribe("arm", 1, &nazeROS::armCallback, this);
   imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0/imu_pub_rate), &nazeROS::imuCallback, this);
   rc_send_timer_ = nh_.createTimer(ros::Duration(1.0/rc_send_rate), &nazeROS::rcCallback, this);
 
   // setup publishers
   Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
 
-  // initialize variables
-  rc_commands_[RC_AIL] = 0;
-  rc_commands_[RC_ELE] = 0;
-  rc_commands_[RC_THR] = 0;
-  rc_commands_[RC_RUD] = 0;
-  rc_commands_[RC_AUX1] = 0;
-  rc_commands_[RC_AUX2] = 0;
-  rc_commands_[RC_AUX3] = 0;
-  rc_commands_[RC_AUX4] = 0;
+  // initialize RC variables
+  center_sticks_.resize(8);
+  max_sticks_.resize(8);
+  min_sticks_.resize(8);
+  rc_commands_.resize(8);
+  ROS_WARN("RC Calibration Settings");
+  loadRCFromParam();
+  armed_ = false;
+  acro_ = false;
 
   //initialize constant message members
-  Imu_.header.frame_id = imu_frame_id_;
+  Imu_.header.frame_id = imu_frame_id;
   // accel noise is 400 ug's
   // gyro noise is 0.05 deg/s
   boost::array<double,9> lin_covariance = { {0.0004, 0.0, 0.0,
@@ -73,6 +75,20 @@ nazeROS::~nazeROS(){
 }
 
 
+void nazeROS::calibrationCallback(const std_msgs::BoolConstPtr &msg)
+{
+  if(msg->data){
+    if(calibrateRC()){
+      ROS_INFO("RC Calibration Successful");
+    }
+  }
+}
+
+void nazeROS::armCallback(const std_msgs::BoolConstPtr &msg)
+{
+  armed_ = msg->data;
+}
+
 void nazeROS::RPYCallback(const relative_nav_msgs::CommandConstPtr &msg)
 {
   int aux1(0.0), aux2(0.0), aux3(0.0), aux4(0.0);
@@ -85,18 +101,18 @@ void nazeROS::RPYCallback(const relative_nav_msgs::CommandConstPtr &msg)
 
   for(int i=0; i<8; i++){
     if(i == RC_AIL || i == RC_ELE || i == RC_RUD){
-      PWM_range = max_sticks_[i] - min_sticks_[i];
-      rc_commands_[i] = (uint16_t)sat((int)round(command[i]*PWM_range)+center_sticks_[i],min_PWM_output_, max_PWM_output_);
+      PWM_range = (max_sticks_[i] - min_sticks_[i])/2;
+      rc_commands_[i] = (uint16_t)sat((int)round(command[i]*PWM_range+center_sticks_[i]),min_PWM_output_, max_PWM_output_);
     }else if(i == RC_THR){
       PWM_range = max_sticks_[i] - min_sticks_[i];
-      rc_commands_[i] = (uint16_t)sat((int)round(command[i]*PWM_range)+center_sticks_[i],min_PWM_output_, max_PWM_output_);
-    }else{
-      PWM_range = max_PWM_output_-min_PWM_output_;
-      rc_commands_[i] = (uint16_t)(round(command[i]*PWM_range + min_PWM_output_));
+      rc_commands_[i] = (uint16_t)sat((int)round(command[i]*PWM_range+min_sticks_[i]),min_PWM_output_, max_PWM_output_);
+    }else if(i == RC_ARM){
+      rc_commands_[RC_ARM] = armed_?max_PWM_output_:min_PWM_output_;
+    }else if(i == RC_ACRO){
+      rc_commands_[RC_ACRO] = acro_?max_PWM_output_:min_PWM_output_;
     }
   }
 }
-
 
 void nazeROS::imuCallback(const ros::TimerEvent& event)
 {
@@ -126,7 +142,7 @@ bool nazeROS::calibrateRC()
   double sum[4] = {0.0, 0.0,0.0,0.0};
 
   ROS_WARN("Calibrating trim with RC channels, leave sticks at center, and throttle low");
-  for(int i=0; i<10; i++){
+  for(int i=0; i<200; i++){
     success = MSP_->getRC(read_rc_commands);
     if(success){
       for(int j=0; j<4; j++){
@@ -139,19 +155,21 @@ bool nazeROS::calibrateRC()
   }
   ROS_WARN("Saving Centered Data");
   for(int i=0; i<4; i++){
-    center_sticks_[i] = (uint16_t)round(sum[i]/10.0);
+    center_sticks_[i] = (uint16_t)round(sum[i]/200.0);
     ROS_INFO_STREAM("Channel " << i << " trim = " << center_sticks_[i]);
   }
 
-  ROS_WARN("Calibrating maximum and minimum of RC channels, move sticks to full extent");
+  ROS_WARN("Calibrating maximum and minimum of RC channels");
+  ROS_WARN("Provide Full Throttle Command with Joystick and");
+  ROS_WARN("move RC sticks to full extent");
   uint16_t max_PWM_received[4] = {center_sticks_[0], center_sticks_[1], center_sticks_[2], center_sticks_[3]};
   uint16_t min_PWM_received[4] = {center_sticks_[0], center_sticks_[1], center_sticks_[2], center_sticks_[3]};
-  for(int i=0; i<100; i++){
+  for(int i=0; i<200; i++){
     success = MSP_->getRC(read_rc_commands);
     if(success){
       for(int j=0; j<4; j++){
-        max_PWM_received[j] = (uint16_t)std::max(max_PWM_received[j],read_rc_commands.rcData[j]);
-        min_PWM_received[j] = (uint16_t)std::min(min_PWM_received[j],read_rc_commands.rcData[j]);
+          max_PWM_received[j] = (uint16_t)(max_PWM_received[j] > read_rc_commands.rcData[j]) ? max_PWM_received[j] : read_rc_commands.rcData[j];
+          min_PWM_received[j] = (uint16_t)(min_PWM_received[j] < read_rc_commands.rcData[j]) ? min_PWM_received[j] : read_rc_commands.rcData[j];
       }
     }else{
       ROS_ERROR("Serial Read Error");
@@ -167,27 +185,6 @@ bool nazeROS::calibrateRC()
   }
   return true;
 }
-
-
-bool nazeROS::loadRCFromParam()
-{
-  nh_private_.param<int>("roll/max", max_sticks_[RC_AIL], 2000);
-  nh_private_.param<int>("pitch/max", max_sticks_[RC_ELE], 2000);
-  nh_private_.param<int>("yaw/max", max_sticks_[RC_RUD], 2000);
-  nh_private_.param<int>("thrust/max", max_sticks_[RC_THR], 2000);
-
-  nh_private_.param<int>("roll/min", min_sticks_[RC_AIL], 1000);
-  nh_private_.param<int>("pitch/min", min_sticks_[RC_ELE], 1000);
-  nh_private_.param<int>("yaw/min", min_sticks_[RC_RUD], 1000);
-  nh_private_.param<int>("thrust/min", min_sticks_[RC_THR], 1000);
-
-  nh_private_.param<int>("roll/center", center_sticks_[RC_AIL], 1500);
-  nh_private_.param<int>("pitch/center", center_sticks_[RC_ELE], 1500);
-  nh_private_.param<int>("yaw/center", center_sticks_[RC_RUD], 1500);
-  nh_private_.param<int>("thrust/center", center_sticks_[RC_THR], 1500);
-  return true;
-}
-
 
 bool nazeROS::sendRC()
 {
@@ -205,7 +202,7 @@ bool nazeROS::getRC()
   bool success = MSP_->getRC(actual_rc_commands);
   ROS_INFO_STREAM("RC Commands:");
   for(int i=0; i<8; i++){
-    ROS_INFO_STREAM("i: = " << actual_rc_commands.rcData[i]);
+    ROS_INFO_STREAM(i <<": = " << actual_rc_commands.rcData[i]);
   }
   return true;
 }
@@ -230,6 +227,50 @@ bool nazeROS::getImu()
     return false;
   }
 }
+
+bool nazeROS::loadRCFromParam()
+{
+  int max_ail, max_ele, max_rud, max_thr;
+  int min_ail, min_ele, min_rud, min_thr;
+  int mid_ail, mid_ele, mid_rud, mid_thr;
+  nh_private_.param<int>("roll/max",  max_ail, 2000);
+  nh_private_.param<int>("pitch/max", max_ele, 2000);
+  nh_private_.param<int>("yaw/max",   max_rud, 2000);
+  nh_private_.param<int>("thrust/max",max_thr, 2000);
+
+  nh_private_.param<int>("roll/min",   min_ail, 1000);
+  nh_private_.param<int>("pitch/min",  min_ele, 1000);
+  nh_private_.param<int>("yaw/min",    min_rud, 1000);
+  nh_private_.param<int>("thrust/min", min_thr, 1000);
+
+  nh_private_.param<int>("roll/center",   mid_ail, 1500);
+  nh_private_.param<int>("pitch/center",  mid_ele, 1500);
+  nh_private_.param<int>("yaw/center",    mid_rud, 1500);
+  nh_private_.param<int>("thrust/center", mid_thr, 1500);
+
+  max_sticks_[RC_AIL] = max_ail;
+  max_sticks_[RC_ELE] = max_ele;
+  max_sticks_[RC_RUD] = max_rud;
+  max_sticks_[RC_THR] = max_thr;
+  min_sticks_[RC_AIL] = min_ail;
+  min_sticks_[RC_ELE] = min_ele;
+  min_sticks_[RC_RUD] = min_rud;
+  min_sticks_[RC_THR] = min_thr;
+  center_sticks_[RC_AIL] = mid_ail;
+  center_sticks_[RC_ELE] = mid_ele;
+  center_sticks_[RC_RUD] = mid_rud;
+  center_sticks_[RC_THR] = mid_thr;
+
+  for(int i = 0; i<4; i++){
+    ROS_WARN_STREAM("max = " << max_sticks_[i] << " min = " << min_sticks_[i] << " center = " << center_sticks_[i]);
+    rc_commands_[i] = (i == RC_THR)?min_PWM_output_:center_sticks_[i];
+  }
+  for(int i=4; i<8; i++){
+    rc_commands_[i] = min_PWM_output_;
+  }
+  return true;
+}
+
 
 int nazeROS::sat(int input, int min, int max){
   int output(input);
