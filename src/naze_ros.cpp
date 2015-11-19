@@ -193,8 +193,8 @@ bool nazeROS::sendRC()
   for(int i=0; i<8; i++){
     outgoing_rc_commands.rcData[i] = rc_commands_[i];
   }
-  MSP_->setRawRC(outgoing_rc_commands);
-  return getRC();
+  return MSP_->setRawRC(outgoing_rc_commands);
+  //return getRC();
 }
 
 bool nazeROS::getRC()
@@ -216,11 +216,11 @@ bool nazeROS::getImu()
   bool received = MSP_->getRawIMU(receivedIMUdata);
   if(received){
     Imu_.linear_acceleration.x = (double)receivedIMUdata.accx/512.0*9.80665;
-    Imu_.linear_acceleration.y = (double)receivedIMUdata.accy/512.0*9.80665;
-    Imu_.linear_acceleration.z = (double)receivedIMUdata.accz/512.0*9.80665;
+    Imu_.linear_acceleration.y = -1.0*(double)receivedIMUdata.accy/512.0*9.80665;
+    Imu_.linear_acceleration.z = -1.0*(double)receivedIMUdata.accz/512.0*9.80665;
     Imu_.angular_velocity.x = (double)receivedIMUdata.gyrx*4.096/180.0*M_PI;
-    Imu_.angular_velocity.y = (double)receivedIMUdata.gyry*4.096/180.0*M_PI;
-    Imu_.angular_velocity.z = (double)receivedIMUdata.gyrz*4.096/180.0*M_PI;
+    Imu_.angular_velocity.y = -1.0*(double)receivedIMUdata.gyry*4.096/180.0*M_PI;
+    Imu_.angular_velocity.z = -1.0*(double)receivedIMUdata.gyrz*4.096/180.0*M_PI;
     Imu_.header.stamp = ros::Time::now();
     Imu_publisher_.publish(Imu_);
     return true;
