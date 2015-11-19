@@ -74,7 +74,6 @@ private:
   bool calibrateRC();
   bool loadRCFromParam();
 
-  int mapPercentToRC(double percent_command);
   int sat(int input, int min, int max);
 };
 

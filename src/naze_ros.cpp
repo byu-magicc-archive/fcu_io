@@ -187,8 +187,6 @@ bool nazeROS::calibrateRC()
   return true;
 }
 
-
-
 bool nazeROS::sendRC()
 {
   SetRawRC outgoing_rc_commands;
@@ -215,7 +213,6 @@ bool nazeROS::getImu()
 {
   RawIMU receivedIMUdata;
   memset(&receivedIMUdata, 0, sizeof(receivedIMUdata));
-
   bool received = MSP_->getRawIMU(receivedIMUdata);
   if(received){
     Imu_.linear_acceleration.x = (double)receivedIMUdata.accx/512.0*9.80665;
@@ -275,12 +272,6 @@ bool nazeROS::loadRCFromParam()
   return true;
 }
 
-
-int nazeROS::mapPercentToRC(double percent_command)
-{
-  int output =  (int)round(percent_command*(max_PWM_output_-min_PWM_output_)) + min_PWM_output_;
-//  ROS_INFO_STREAM("input " << percent_command << " output " << output);
-}
 
 int nazeROS::sat(int input, int min, int max){
   int output(input);
