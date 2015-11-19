@@ -19,7 +19,7 @@ nazeROS::nazeROS() :
   nh_private_.param<double>("max_throttle", max_throttle_, 74.0);
   nh_private_.param<std::string>("imu_frame_id", imu_frame_id, "shredder/base/Imu");
   nh_private_.param<double>("imu_pub_rate", imu_pub_rate, 250.0);
-  nh_private_.param<double>("rc_send_rate", rc_send_rate, 100.0);
+  nh_private_.param<double>("rc_send_rate", rc_send_rate, 50.0);
   nh_private_.param<std::string>("serial_port", serial_port, "/dev/ttyUSB0");
   nh_private_.param<int>("baudrate", baudrate, 115200);
   nh_private_.param<double>("timeout", dtimeout, 2);
@@ -63,11 +63,11 @@ nazeROS::nazeROS() :
   Imu_.angular_velocity_covariance = ang_covariance;
   Imu_.linear_acceleration_covariance = lin_covariance;
 
-//  if(calibrateIMU()){
-//    ROS_INFO("IMU calibration successful");
-//  }else{
-//    ROS_ERROR("IMU calibration unsuccessful");
-//  }
+  if(calibrateIMU()){
+    ROS_INFO("IMU calibration successful");
+  }else{
+    ROS_ERROR("IMU calibration unsuccessful");
+  }
   ROS_INFO("finished initialization");
 }
 
@@ -193,8 +193,8 @@ bool nazeROS::sendRC()
   for(int i=0; i<8; i++){
     outgoing_rc_commands.rcData[i] = rc_commands_[i];
   }
-  return MSP_->setRawRC(outgoing_rc_commands);
-//  return getRC();
+  MSP_->setRawRC(outgoing_rc_commands);
+  return getRC();
 }
 
 bool nazeROS::getRC()
