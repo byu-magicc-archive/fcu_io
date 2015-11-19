@@ -1,0 +1,22 @@
+naze: {
+  roll: {
+    max: 1886,
+    min: 1077,
+    center: 1481
+  },
+  pitch: {
+    max: 1879,
+    min: 1075,
+    center: 1481
+  },
+  yaw: {
+    max: 1957,
+    min: 1122,
+    center: 1484
+  },
+  thrust: {
+    max: 1915,
+    min: 1076,
+    center: 1076
+  }
+}
