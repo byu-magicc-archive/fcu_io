@@ -27,6 +27,9 @@ nazeROS::nazeROS() :
 
   // connect serial port
   serial::Timeout timeout = serial::Timeout::simpleTimeout(dtimeout);
+  timeout.inter_byte_timeout = serial::Timeout::max();
+  timeout.read_timeout_constant = 1;
+  timeout.write_timeout_constant = 2;
   MSP_ = new MSP(serial_port, (u_int32_t)baudrate, timeout);
 
   // Set up Callbacks
@@ -63,11 +66,11 @@ nazeROS::nazeROS() :
   Imu_.angular_velocity_covariance = ang_covariance;
   Imu_.linear_acceleration_covariance = lin_covariance;
 
-  if(calibrateIMU()){
-    ROS_INFO("IMU calibration successful");
-  }else{
-    ROS_ERROR("IMU calibration unsuccessful");
-  }
+//  if(calibrateIMU()){
+//    ROS_INFO("IMU calibration successful");
+//  }else{
+//    ROS_ERROR("IMU calibration unsuccessful");
+//  }
   ROS_INFO("finished initialization");
 }
 
@@ -214,6 +217,8 @@ bool nazeROS::getImu()
   RawIMU receivedIMUdata;
   memset(&receivedIMUdata, 0, sizeof(receivedIMUdata));
   bool received = MSP_->getRawIMU(receivedIMUdata);
+//  RC receivedRCdata;
+//  bool received = MSP_->getRC(receivedRCdata);
   if(received){
     Imu_.linear_acceleration.x = (double)receivedIMUdata.accx/512.0*9.80665;
     Imu_.linear_acceleration.y = -1.0*(double)receivedIMUdata.accy/512.0*9.80665;
