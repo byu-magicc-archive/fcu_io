@@ -218,9 +218,9 @@ bool nazeROS::getImu()
     Imu_.linear_acceleration.x = (double)receivedIMUdata.accx/512.0*9.80665;
     Imu_.linear_acceleration.y = (double)receivedIMUdata.accy/512.0*9.80665;
     Imu_.linear_acceleration.z = (double)receivedIMUdata.accz/512.0*9.80665;
-    Imu_.angular_velocity.x = (double)receivedIMUdata.gyrx*4.096/180.0*M_PI;
-    Imu_.angular_velocity.y = (double)receivedIMUdata.gyry*4.096/180.0*M_PI;
-    Imu_.angular_velocity.z = (double)receivedIMUdata.gyrz*4.096/180.0*M_PI;
+    Imu_.angular_velocity.x = (double)receivedIMUdata.gyrx*0.001065264; // 2^15 = 2000 deg/s
+    Imu_.angular_velocity.y = (double)receivedIMUdata.gyry*0.001065264;
+    Imu_.angular_velocity.z = (double)receivedIMUdata.gyrz*0.001065264;
     Imu_.header.stamp = ros::Time::now();
     Imu_publisher_.publish(Imu_);
     return true;
