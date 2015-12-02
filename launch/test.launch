@@ -3,7 +3,8 @@
  <rosparam subst_value="True">
   xbox:           { deadzone: 0.15,
                     autorepeat_rate: 10}
-  naze:           { rc_send_rate: 50.0,
+  naze:           { imu_pub_rate: 100.0,
+                    rc_send_rate: 50.0,
                     timeout: 20 }
 
  </rosparam>  
@@ -11,7 +12,7 @@
  <!--<node name="xbox"                pkg="joy"                 type="joy_node"/>-->
  <rosparam command="load" file="$(find naze_ros)/param/rc.yaml"/>
  <node name="naze"                pkg="naze_ros"            type="naze_ros_node" output="screen">
- 	<param name="serial_port" value="/dev/ttyUSB0"/>
+ 	<param name="serial_port" value="/dev/ttyUSB1"/>
  </node>
  <node name="controller"          pkg="rotor_sim_joy"       type="rotor_sim_joy"/>
 
