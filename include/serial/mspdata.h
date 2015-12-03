@@ -2,6 +2,18 @@
 #include <stdint.h>
 #include <iosfwd>
 
+// PID channels
+#define ROLL 0
+#define PITCH 1
+#define YAW 2
+#define ALT 3
+#define POS 4
+#define POSR 5
+#define NAVR 6
+#define LEVEL 7
+#define MAG 8
+#define VEL 9
+
 enum class Command : uint8_t
 {
   MSP_IDENT = 100,
@@ -42,6 +54,30 @@ enum class Command : uint8_t
   MSP_BIND = 240,
   MSP_EEPROM_WRITE = 250
 };
+
+struct PID
+{
+  const static uint8_t type = 112;
+  struct PIDitem
+  {
+    uint8_t P;
+    uint8_t I;
+    uint8_t D;
+  };
+  PIDitem PIDs[10];
+} __attribute__((packed));
+
+struct SetPID
+{
+  const static uint8_t type = 202;
+  struct PIDitem
+  {
+    uint8_t P;
+    uint8_t I;
+    uint8_t D;
+  };
+  PIDitem PIDs[10];
+} __attribute__((packed));
 
 struct Ident
 {

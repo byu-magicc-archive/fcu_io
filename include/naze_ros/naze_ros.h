@@ -9,6 +9,7 @@
 #include "serial/msp.h"
 #include "serial/mspdata.h"
 
+// RC channels
 #define RC_AIL 0
 #define RC_ELE 1
 #define RC_THR 2
@@ -20,6 +21,18 @@
 
 namespace naze_ros
 {
+
+struct PIDitem{
+  double P;
+  double I;
+  double D;
+  PIDitem() {
+    P = 0;
+    I = 0;
+    D = 0;
+  }
+};
+
 
 class nazeROS
 {
@@ -63,6 +76,7 @@ private:
   std::vector<uint16_t> min_sticks_;
   sensor_msgs::Imu Imu_;
   MSP* MSP_;
+  std::vector<PIDitem> PIDs_;
   bool armed_;
   bool acro_;
 
@@ -73,6 +87,8 @@ private:
   bool calibrateIMU();
   bool calibrateRC();
   bool loadRCFromParam();
+  bool getPID();
+  bool setPID(PIDitem roll, PIDitem pitch, PIDitem yaw);
 
   int sat(int input, int min, int max);
 };

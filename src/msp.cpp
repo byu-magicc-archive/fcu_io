@@ -6,6 +6,23 @@ MSP::MSP(std::string port, uint32_t baud, serial::Timeout timeout)
 {
 }
 
+bool MSP::getPID(PID& message)
+{
+  if(request(PID::type)){
+    return receive(message);
+  }else{
+    return false;
+  }
+}
+
+bool MSP::setPID(SetPID& message)
+{
+  if(!send(message)){
+    return false;
+  }else{
+    return acknowledge(SetPID::type);
+  }
+}
 
 bool MSP::getRawIMU(RawIMU &message)
 {
@@ -61,6 +78,20 @@ bool MSP::calibrateIMU()
   }
 }
 
+bool MSP::receive(PID &message)
+{
+  uint8_t size = sizeof(PID);
+  uint8_t code = (uint8_t)PID::type;
+  uint8_t data[size];
+  if(receive(code, size, data)) {
+    for(int i = 0; i<10; i++){
+      message.PIDs[i].P = data[3*i];
+      message.PIDs[i].I = data[3*i+1];
+      message.PIDs[i].D = data[3*i+2];
+    }
+  }
+}
+
 
 bool MSP::receive(RawIMU& message)
 {
@@ -110,6 +141,18 @@ bool MSP::receive(RC &message)
   }
 }
 
+bool MSP::send(SetPID &command)
+{
+  uint8_t size = sizeof(SetPID);
+  uint8_t data[size];
+  for(int i=0; i<10; i++){
+    data[3*i] = command.PIDs[i].P;
+    data[3*i+1] = command.PIDs[i].I;
+    data[3*i+2] = command.PIDs[i].D;
+  }
+  return send(command.type, reinterpret_cast<uint8_t*>(&data), sizeof(data));
+}
+
 
 bool MSP::send(SetRawRC &command)
 {
@@ -117,13 +160,6 @@ bool MSP::send(SetRawRC &command)
   for(int i=0; i<8; i++){
      data[i] = command.rcData[i];
   }
-  return send(command.type, reinterpret_cast<u_int8_t*>(&data), sizeof(data));
-}
-
-
-bool MSP::send(Attitude& command)
-{
-  u_int16_t data[3] = {command.angx, command.angy, command.heading};
   return send(command.type, reinterpret_cast<u_int8_t*>(&data), sizeof(data));
 }
 
@@ -139,20 +175,23 @@ bool MSP::acknowledge(u_int8_t code)
 bool MSP::receive(u_int8_t code, u_int8_t size, u_int8_t* data)
 {
   // read data
+  bool error = false;
   std::vector<u_int8_t> message_buffer;
   while((int)Serial_.available() < (int)size+6) {}
   if((int)Serial_.available() > (int)size+6){
-    ROS_ERROR_STREAM((int)Serial_.available() - (int)size -6 <<
-                     "extra bits on serial port");
+    ROS_ERROR_STREAM((int)Serial_.available() - (int)size -6 << "extra bits on serial port");
+    error = true;
   }
   size_t header_length = Serial_.read(message_buffer, (u_int8_t)(size+6));
 
   // DEBUG
-//  ROS_INFO_STREAM("recieved ");
-//  for(int i = 0; i<(int)size+6; i++){
-//    std::bitset<8> output(message_buffer[i]);
-//    ROS_INFO_STREAM(message_buffer[i] << ": " <<output);
-//  }
+  if(error){
+    ROS_INFO_STREAM("recieved ");
+    for(int i = 0; i<(int)size+6; i++){
+      std::bitset<8> output(message_buffer[i]);
+      ROS_INFO_STREAM(message_buffer[i] << ": " <<output);
+    }
+  }
 
   // check header
   if(message_buffer[0] != (u_int8_t)'$' ||
@@ -212,11 +251,11 @@ bool MSP::send(u_int8_t code, u_int8_t* data, u_int8_t size)
 
 
   // DEBUG
-//  ROS_INFO_STREAM("sent ");
-//  for(int i=0; i<(int)size+6; i++){
-//    std::bitset<8> output(output_buffer[i]);
-//    ROS_INFO_STREAM( output_buffer[i] << ": " << output);
-//  }
+  ROS_INFO_STREAM("sent ");
+  for(int i=0; i<(int)size+6; i++){
+    std::bitset<8> output(output_buffer[i]);
+    ROS_INFO_STREAM( output_buffer[i] << ": " << output);
+  }
 
   // return code
   return bytes_wrote == output_buffer.size();
