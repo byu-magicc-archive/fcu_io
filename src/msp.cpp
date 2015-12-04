@@ -175,23 +175,21 @@ bool MSP::acknowledge(u_int8_t code)
 bool MSP::receive(u_int8_t code, u_int8_t size, u_int8_t* data)
 {
   // read data
-  bool error = false;
   std::vector<u_int8_t> message_buffer;
   while((int)Serial_.available() < (int)size+6) {}
   if((int)Serial_.available() > (int)size+6){
     ROS_ERROR_STREAM((int)Serial_.available() - (int)size -6 << "extra bits on serial port");
-    error = true;
   }
   size_t header_length = Serial_.read(message_buffer, (u_int8_t)(size+6));
 
   // DEBUG
-  if(error){
-    ROS_INFO_STREAM("recieved ");
-    for(int i = 0; i<(int)size+6; i++){
-      std::bitset<8> output(message_buffer[i]);
-      ROS_INFO_STREAM(message_buffer[i] << ": " <<output);
-    }
-  }
+//  if(error){
+//    ROS_INFO_STREAM("recieved ");
+//    for(int i = 0; i<(int)size+6; i++){
+//      std::bitset<8> output(message_buffer[i]);
+//      ROS_INFO_STREAM(message_buffer[i] << ": " <<output);
+//    }
+//  }
 
   // check header
   if(message_buffer[0] != (u_int8_t)'$' ||
@@ -251,11 +249,11 @@ bool MSP::send(u_int8_t code, u_int8_t* data, u_int8_t size)
 
 
   // DEBUG
-  ROS_INFO_STREAM("sent ");
-  for(int i=0; i<(int)size+6; i++){
-    std::bitset<8> output(output_buffer[i]);
-    ROS_INFO_STREAM( output_buffer[i] << ": " << output);
-  }
+//  ROS_INFO_STREAM("sent ");
+//  for(int i=0; i<(int)size+6; i++){
+//    std::bitset<8> output(output_buffer[i]);
+//    ROS_INFO_STREAM( output_buffer[i] << ": " << output);
+//  }
 
   // return code
   return bytes_wrote == output_buffer.size();

@@ -7,12 +7,18 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  cmake_modules
+  dynamic_reconfigure
+)
+
+generate_dynamic_reconfigure_options(
+  cfg/gains.cfg
 )
 
 catkin_package(
     LIBRARIES ${PROJECT_NAME}
     INCLUDE_DIRS include
-    DEPENDS rt pthread
+    DEPENDS rt pthread dynamic_reconfigure
 )
 
 ###########
@@ -22,6 +28,7 @@ include_directories(include)
 include_directories(
   ${catkin_INCLUDE_DIRS}
 )
+include_directories(${dynamic_reconfigure_PACKAGE_PATH}/cmake/cfgbuild.cmake)
 
 ## Declare a cpp library
  add_library(serial_lib
@@ -45,7 +52,7 @@ add_executable(naze_ros_node
 )
 
 ## Add cmake target dependencies of the executable/library
-add_dependencies(naze_ros_node relative_nav_msgs_generate_messages_cpp)
+add_dependencies(naze_ros_node ${PROJECT_NAME}_gencfg relative_nav_msgs_generate_messages_cpp)
 add_dependencies(naze_ros_node serial_lib)
 
 target_link_libraries(naze_ros_node serial_lib

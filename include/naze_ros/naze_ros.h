@@ -2,7 +2,9 @@
 #define NAZE_ROS_H
 
 #include <ros/ros.h>
+#include <naze_ros/GainConfig.h>
 #include <relative_nav_msgs/Command.h>
+#include <dynamic_reconfigure/server.h>
 #include <sensor_msgs/Imu.h>
 #include <std_msgs/Bool.h>
 
@@ -60,6 +62,11 @@ private:
   ros::Publisher Imu_publisher_;
   ros::Timer imu_pub_timer_;
   ros::Timer rc_send_timer_;
+
+  // Gain controller
+  dynamic_reconfigure::Server<naze_ros::GainConfig> server_;
+  dynamic_reconfigure::Server<naze_ros::GainConfig>::CallbackType func_;
+  void gainCallback(naze_ros::GainConfig &config, uint32_t level);
 
   // Parameters
   int min_PWM_output_;

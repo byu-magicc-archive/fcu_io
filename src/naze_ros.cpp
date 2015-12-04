@@ -24,7 +24,6 @@ nazeROS::nazeROS() :
   nh_private_.param<int>("baudrate", baudrate, 115200);
   nh_private_.param<double>("timeout", dtimeout, 2);
 
-
   // connect serial port
   serial::Timeout timeout = serial::Timeout::simpleTimeout(dtimeout);
   timeout.inter_byte_timeout = serial::Timeout::max();
@@ -73,19 +72,12 @@ nazeROS::nazeROS() :
 //    ROS_ERROR("IMU calibration unsuccessful");
 //  }
   getPID();
-  PIDitem roll, pitch, yaw;
-  roll.P = 1;
-  roll.I = 0;
-  roll.D = 0;
-  pitch.P = 1;
-  pitch.I = 0;
-  pitch.D = 0;
-  yaw.P = 1;
-  yaw.I = 0;
-  yaw.D = 0;
-  setPID(roll, pitch, yaw);
+
+  // dynamic reconfigure
+  func_ = boost::bind(&nazeROS::gainCallback, this, _1, _2);
+  server_.setCallback(func_);
+
   ROS_INFO("finished initialization");
-  sleep(10);
 }
 
 nazeROS::~nazeROS(){
@@ -334,6 +326,23 @@ bool nazeROS::loadRCFromParam()
     rc_commands_[i] = min_PWM_output_;
   }
   return true;
+}
+
+void nazeROS::gainCallback(naze_ros::GainConfig &config, uint32_t level)
+{
+  PIDitem new_roll, new_pitch, new_yaw;
+  new_roll.P = config.rollP;
+  new_roll.I = config.rollI;
+  new_roll.D = config.rollD;
+  new_pitch.P = config.pitchP;
+  new_pitch.I = config.pitchI;
+  new_pitch.D = config.pitchD;
+  new_yaw.P = config.yawP;
+  new_yaw.I = config.yawI;
+  new_yaw.D = config.yawD;
+  setPID(new_roll, new_pitch, new_yaw);
+  ROS_INFO("new gains");
+  return;
 }
 
 
