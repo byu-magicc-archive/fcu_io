@@ -24,7 +24,6 @@ nazeROS::nazeROS() :
   nh_private_.param<int>("baudrate", baudrate, 115200);
   nh_private_.param<double>("timeout", dtimeout, 2);
 
-
   // connect serial port
   serial::Timeout timeout = serial::Timeout::simpleTimeout(dtimeout);
   timeout.inter_byte_timeout = serial::Timeout::max();
@@ -47,6 +46,7 @@ nazeROS::nazeROS() :
   max_sticks_.resize(8);
   min_sticks_.resize(8);
   rc_commands_.resize(8);
+  PIDs_.resize(10);
   ROS_WARN("RC Calibration Settings");
   loadRCFromParam();
   armed_ = false;
@@ -71,6 +71,12 @@ nazeROS::nazeROS() :
 //  }else{
 //    ROS_ERROR("IMU calibration unsuccessful");
 //  }
+  getPID();
+
+  // dynamic reconfigure
+  func_ = boost::bind(&nazeROS::gainCallback, this, _1, _2);
+  server_.setCallback(func_);
+
   ROS_INFO("finished initialization");
 }
 
@@ -200,6 +206,32 @@ bool nazeROS::sendRC()
   //return getRC();
 }
 
+bool nazeROS::setPID(PIDitem roll, PIDitem pitch, PIDitem yaw)
+{
+  SetPID outgoing_PID_command;
+  for(int i = 0; i<10; i++){
+    if(i == ROLL){
+      outgoing_PID_command.PIDs[ROLL].P = (uint8_t)(roll.P*10); // convert back to chars for MSP
+      outgoing_PID_command.PIDs[ROLL].I = (uint8_t)(roll.I*1000);
+      outgoing_PID_command.PIDs[ROLL].D = (uint8_t)(roll.D*1);
+    }else if( i == PITCH){
+      outgoing_PID_command.PIDs[PITCH].P = (uint8_t)(pitch.P*10);
+      outgoing_PID_command.PIDs[PITCH].I = (uint8_t)(pitch.I*1000);
+      outgoing_PID_command.PIDs[PITCH].D = (uint8_t)(pitch.D*1);
+    }else if( i == YAW) {
+      outgoing_PID_command.PIDs[YAW].P = (uint8_t)(yaw.P*10);
+      outgoing_PID_command.PIDs[YAW].I = (uint8_t)(yaw.I*1000);
+      outgoing_PID_command.PIDs[YAW].D = (uint8_t)(yaw.D*1);
+    }else{
+      outgoing_PID_command.PIDs[i].P = (uint8_t)(PIDs_[i].P*10);
+      outgoing_PID_command.PIDs[i].I = (uint8_t)(PIDs_[i].I*1000);
+      outgoing_PID_command.PIDs[i].D = (uint8_t)(PIDs_[i].D*1);
+    }
+  }
+  MSP_->setPID(outgoing_PID_command);
+  return getPID();
+}
+
 bool nazeROS::getRC()
 {
   RC actual_rc_commands;
@@ -230,6 +262,25 @@ bool nazeROS::getImu()
     Imu_publisher_.publish(Imu_);
     return true;
   } else{
+    return false;
+  }
+}
+
+bool nazeROS::getPID(){
+  PID receivedPIDmsg;
+  memset(&receivedPIDmsg, 0, sizeof(receivedPIDmsg));
+  bool received = MSP_->getPID(receivedPIDmsg);
+  if(received){
+    for(int i = 0; i<10; i++){
+      PIDs_[i].P = (double)receivedPIDmsg.PIDs[i].P/10.0; // convert back to double
+      PIDs_[i].I = (double)receivedPIDmsg.PIDs[i].I/1000.0; // convert back to double
+      PIDs_[i].D = (double)receivedPIDmsg.PIDs[i].D/1.0; // convert back to double
+    }
+    ROS_INFO_STREAM("Gains received: Roll = " <<  PIDs_[ROLL].P << ", "  << PIDs_[ROLL].I << ", " <<  PIDs_[ROLL].D);
+    ROS_INFO_STREAM("Gains received: PITCH = " <<  PIDs_[PITCH].P << ", "  << PIDs_[PITCH].I << ", " <<  PIDs_[PITCH].D);
+    ROS_INFO_STREAM("Gains received: YAW = " <<  PIDs_[YAW].P << ", "  << PIDs_[YAW].I << ", " <<  PIDs_[YAW].D);
+    return true;
+  } else {
     return false;
   }
 }
@@ -277,6 +328,23 @@ bool nazeROS::loadRCFromParam()
   return true;
 }
 
+void nazeROS::gainCallback(naze_ros::GainConfig &config, uint32_t level)
+{
+  PIDitem new_roll, new_pitch, new_yaw;
+  new_roll.P = config.rollP;
+  new_roll.I = config.rollI;
+  new_roll.D = config.rollD;
+  new_pitch.P = config.pitchP;
+  new_pitch.I = config.pitchI;
+  new_pitch.D = config.pitchD;
+  new_yaw.P = config.yawP;
+  new_yaw.I = config.yawI;
+  new_yaw.D = config.yawD;
+  setPID(new_roll, new_pitch, new_yaw);
+  ROS_INFO("new gains");
+  return;
+}
+
 
 int nazeROS::sat(int input, int min, int max){
   int output(input);
@@ -287,5 +355,7 @@ int nazeROS::sat(int input, int min, int max){
   }
   return output;
 }
+
+
 
 } // namespace naze_ros
