@@ -202,7 +202,7 @@ bool nazeROS::sendRC()
   for(int i=0; i<8; i++){
     outgoing_rc_commands.rcData[i] = rc_commands_[i];
   }
-  return MSP_->setRawRC(outgoing_rc_commands);
+  MSP_->setRawRC(outgoing_rc_commands);
   //return getRC();
 }
 
