@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(naze_ros)
 
 find_package(catkin REQUIRED COMPONENTS
-  relative_nav_msgs
+  relative_nav
   sensor_msgs
   roscpp
   rospy
@@ -45,7 +45,7 @@ add_executable(naze_ros_node
 )
 
 ## Add cmake target dependencies of the executable/library
-add_dependencies(naze_ros_node relative_nav_msgs_generate_messages_cpp)
+add_dependencies(naze_ros_node relative_nav_generate_messages_cpp)
 add_dependencies(naze_ros_node serial_lib)
 
 target_link_libraries(naze_ros_node serial_lib

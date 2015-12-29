@@ -93,7 +93,7 @@ void nazeROS::armCallback(const std_msgs::BoolConstPtr &msg)
   armed_ = msg->data;
 }
 
-void nazeROS::RPYCallback(const relative_nav_msgs::CommandConstPtr &msg)
+void nazeROS::RPYCallback(const relative_nav::CommandConstPtr &msg)
 {
   int aux1(0.0), aux2(0.0), aux3(0.0), aux4(0.0);
   double command[4] = {0.0, 0.0, 0.0, 0.0};

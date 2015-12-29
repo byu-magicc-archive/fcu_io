@@ -2,7 +2,7 @@
 #define NAZE_ROS_H
 
 #include <ros/ros.h>
-#include <relative_nav_msgs/Command.h>
+#include <relative_nav/Command.h>
 #include <sensor_msgs/Imu.h>
 #include <std_msgs/Bool.h>
 
@@ -30,7 +30,7 @@ public:
   ~nazeROS();
   void imuCallback(const ros::TimerEvent& event);
   void rcCallback(const ros::TimerEvent& event);
-  void RPYCallback(const relative_nav_msgs::CommandConstPtr &msg);
+  void RPYCallback(const relative_nav::CommandConstPtr &msg);
   void calibrationCallback(const std_msgs::BoolConstPtr &msg);
   void armCallback(const std_msgs::BoolConstPtr &msg);
 
