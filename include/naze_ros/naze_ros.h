@@ -3,12 +3,15 @@
 
 #include <ros/ros.h>
 #include <relative_nav/Command.h>
+#include <naze_ros/GainConfig.h>
+#include <dynamic_reconfigure/server.h>
 #include <sensor_msgs/Imu.h>
 #include <std_msgs/Bool.h>
 
 #include "serial/msp.h"
 #include "serial/mspdata.h"
 
+// RC channels
 #define RC_AIL 0
 #define RC_ELE 1
 #define RC_THR 2
@@ -20,6 +23,18 @@
 
 namespace naze_ros
 {
+
+struct PIDitem{
+  double P;
+  double I;
+  double D;
+  PIDitem() {
+    P = 0;
+    I = 0;
+    D = 0;
+  }
+};
+
 
 class nazeROS
 {
@@ -48,6 +63,11 @@ private:
   ros::Timer imu_pub_timer_;
   ros::Timer rc_send_timer_;
 
+  // Gain controller
+  dynamic_reconfigure::Server<naze_ros::GainConfig> server_;
+  dynamic_reconfigure::Server<naze_ros::GainConfig>::CallbackType func_;
+  void gainCallback(naze_ros::GainConfig &config, uint32_t level);
+
   // Parameters
   int min_PWM_output_;
   int max_PWM_output_;
@@ -63,6 +83,7 @@ private:
   std::vector<uint16_t> min_sticks_;
   sensor_msgs::Imu Imu_;
   MSP* MSP_;
+  std::vector<PIDitem> PIDs_;
   bool armed_;
   bool acro_;
 
@@ -73,6 +94,8 @@ private:
   bool calibrateIMU();
   bool calibrateRC();
   bool loadRCFromParam();
+  bool getPID();
+  bool setPID(PIDitem roll, PIDitem pitch, PIDitem yaw);
 
   int sat(int input, int min, int max);
 };

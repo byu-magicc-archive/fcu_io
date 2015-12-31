@@ -20,6 +20,8 @@ public:
   bool getAttitude(Attitude& message);
   bool setRawRC(SetRawRC& message);
   bool getRC(RC& message);
+  bool getPID(PID& message);
+  bool setPID(SetPID& message);
 
 
 private:
@@ -29,8 +31,9 @@ private:
   bool receive(RawIMU& message);
   bool send(SetRawRC& command);
   bool receive(RC& message);
-  bool send(Attitude& command);
   bool receive(Attitude& message);
+  bool send(SetPID& command);
+  bool receive(PID& message);
 
   // unspecific communication functions
   bool acknowledge(u_int8_t code);
