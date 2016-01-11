@@ -16,7 +16,7 @@ nazeROS::nazeROS() :
   nh_private_.param<double>("max_roll", max_roll_, 25.0*M_PI/180.0);
   nh_private_.param<double>("max_pitch", max_pitch_, 25.0*M_PI/180.0);
   nh_private_.param<double>("max_yaw_rate", max_yaw_rate_, M_PI);
-  nh_private_.param<double>("max_throttle", max_throttle_, 74.0);
+  nh_private_.param<double>("max_thrust", max_throttle_, 74.0);
   nh_private_.param<std::string>("imu_frame_id", imu_frame_id, "shredder/base/Imu");
   nh_private_.param<double>("imu_pub_rate", imu_pub_rate, 250.0);
   nh_private_.param<double>("rc_send_rate", rc_send_rate, 50.0);
@@ -203,7 +203,7 @@ bool nazeROS::sendRC()
     outgoing_rc_commands.rcData[i] = rc_commands_[i];
   }
   MSP_->setRawRC(outgoing_rc_commands);
-  //return getRC();
+  return getRC();
 }
 
 bool nazeROS::setPID(PIDitem roll, PIDitem pitch, PIDitem yaw)
