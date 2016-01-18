@@ -16,6 +16,7 @@
   <node name="xbox"                pkg="joy"                 type="joy_node"/>
  <node name="joy_sim" pkg="joy_sim" type="joy_sim" >
     <rosparam command="load" file="$(find relative_nav)/param/$(arg mav_name).yaml"/>
+    <rosparam command="load" file="$(find relative_nav)/param/xbox.yaml"/>
   </node>
 
  <rosparam command="load" file="$(find naze_ros)/param/rc.yaml"/>

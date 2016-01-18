@@ -2,7 +2,7 @@ naze: {
   roll: { max: 2010,
           min: 1004,
           center: 1494 },
-  pitch: { max: 188,
+  pitch: { max: 2001,
            min: 978,
            center: 1464 },
   throttle: { max: 2008,

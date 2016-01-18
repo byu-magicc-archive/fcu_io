@@ -110,12 +110,15 @@ void nazeROS::RPYCallback(const relative_nav::CommandConstPtr &msg)
   command[RC_RUD] = msg->yaw_rate/max_yaw_rate_;
 
   for(int i=0; i<8; i++){
-    if(i == RC_AIL || i == RC_ELE || i == RC_RUD){
+    if(i == RC_AIL || i == RC_RUD){
       PWM_range = (max_sticks_[i] - min_sticks_[i])/2;
-      rc_commands_[i] = (uint16_t)sat((int)round(command[i]*PWM_range+center_sticks_[i]),min_PWM_output_, max_PWM_output_);
+      rc_commands_[i] = (uint16_t)sat((int)round(command[i]*PWM_range+center_sticks_[i]),min_sticks_[i], max_sticks_[i]);
+    }else if(i == RC_ELE){
+      PWM_range = (max_sticks_[i] - min_sticks_[i])/2;
+      rc_commands_[i] = (uint16_t)sat((int)round(center_sticks_[i]-command[i]*PWM_range),min_sticks_[i], max_sticks_[i]); // pitch is reversed on the naze
     }else if(i == RC_THR){
       PWM_range = max_sticks_[i] - min_sticks_[i];
-      rc_commands_[i] = (uint16_t)sat((int)round(command[i]*PWM_range+min_sticks_[i]),min_PWM_output_, max_PWM_output_);
+      rc_commands_[i] = (uint16_t)sat((int)round(command[i]*PWM_range+min_sticks_[i]),min_sticks_[i], max_sticks_[i]);
     }else if(i == RC_ARM){
       rc_commands_[RC_ARM] = armed_?max_PWM_output_:min_PWM_output_;
     }else if(i == RC_ACRO){
@@ -202,8 +205,8 @@ bool nazeROS::sendRC()
   for(int i=0; i<8; i++){
     outgoing_rc_commands.rcData[i] = rc_commands_[i];
   }
-  MSP_->setRawRC(outgoing_rc_commands);
-  return getRC();
+  return MSP_->setRawRC(outgoing_rc_commands);
+  //return getRC();
 }
 
 bool nazeROS::setPID(PIDitem roll, PIDitem pitch, PIDitem yaw)
