@@ -11,6 +11,7 @@ nazeROS::nazeROS() :
   double imu_pub_rate, rc_send_rate, dtimeout;
   std::string serial_port, imu_frame_id;
   int baudrate;
+  bool enable_GPS, useRNcallback;
   nh_private_.param<int>("min_PWM_output", min_PWM_output_, 1000);
   nh_private_.param<int>("max_PWM_output", max_PWM_output_, 2000);
   nh_private_.param<double>("max_roll", max_roll_, 25.0*M_PI/180.0);
@@ -23,6 +24,9 @@ nazeROS::nazeROS() :
   nh_private_.param<std::string>("serial_port", serial_port, "/dev/ttyUSB0");
   nh_private_.param<int>("baudrate", baudrate, 115200);
   nh_private_.param<double>("timeout", dtimeout, 2);
+  nh_private_.param<bool>("get_imu_attitude", get_imu_attitude_, true);
+  nh_private_.param<bool>("enable_GPS", enable_GPS, true);
+  nh_private_.param<bool>("use_relative_nav_callback", useRNcallback, true);
 
   // connect serial port
   serial::Timeout timeout = serial::Timeout::simpleTimeout(dtimeout);
@@ -32,11 +36,16 @@ nazeROS::nazeROS() :
   MSP_ = new MSP(serial_port, (u_int32_t)baudrate, timeout);
 
   // Set up Callbacks
-  Command_subscriber_ = nh_.subscribe("command", 1, &nazeROS::RPYCallback, this);
+  if(useRNcallback){
+    Command_subscriber_ = nh_.subscribe("command", 1, &nazeROS::RNCommandCallback, this);
+  }else{
+    Command_subscriber_ = nh_.subscribe("command", 1, &nazeROS::commandCallback, this);
+  }
   RC_calibration_subscriber_ = nh_.subscribe("calibrate", 1, &nazeROS::calibrationCallback, this);
   arm_subscriber_ = nh_.subscribe("arm", 1, &nazeROS::armCallback, this);
   imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0/imu_pub_rate), &nazeROS::imuCallback, this);
   rc_send_timer_ = nh_.createTimer(ros::Duration(1.0/rc_send_rate), &nazeROS::rcCallback, this);
+  gps_pub_timer_ = nh_.createTimer(ros::Duration(1.0), &nazeROS::gpsCallback, this);
 
   // setup publishers
   Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
@@ -66,11 +75,11 @@ nazeROS::nazeROS() :
   Imu_.angular_velocity_covariance = ang_covariance;
   Imu_.linear_acceleration_covariance = lin_covariance;
 
-//  if(calibrateIMU()){
-//    ROS_INFO("IMU calibration successful");
-//  }else{
-//    ROS_ERROR("IMU calibration unsuccessful");
-//  }
+  if(calibrateIMU()){
+    ROS_INFO("IMU calibration successful");
+  }else{
+    ROS_ERROR("IMU calibration unsuccessful");
+  }
   getPID();
 
   // dynamic reconfigure
@@ -85,8 +94,7 @@ nazeROS::~nazeROS(){
 }
 
 
-void nazeROS::calibrationCallback(const std_msgs::BoolConstPtr &msg)
-{
+void nazeROS::calibrationCallback(const std_msgs::BoolConstPtr &msg){
   if(msg->data){
     if(calibrateRC()){
       ROS_INFO("RC Calibration Successful");
@@ -99,8 +107,18 @@ void nazeROS::armCallback(const std_msgs::BoolConstPtr &msg)
   armed_ = msg->data;
 }
 
-void nazeROS::RPYCallback(const relative_nav::CommandConstPtr &msg)
-{
+void nazeROS::RNCommandCallback(const relative_nav::CommandConstPtr &msg){
+  command_.roll = msg->roll;
+  command_.pitch = msg->pitch;
+  command_.yaw_rate = msg->yaw_rate;
+  command_.thrust = msg->thrust;
+  command_.angle_mode = true;
+  naze_ros::Command* p = & command_;
+  naze_ros::CommandConstPtr command(p);
+  commandCallback(command);
+}
+
+void nazeROS::commandCallback(const naze_ros::CommandConstPtr &msg){
   int aux1(0.0), aux2(0.0), aux3(0.0), aux4(0.0);
   double command[4] = {0.0, 0.0, 0.0, 0.0};
   uint16_t PWM_range;
@@ -134,22 +152,25 @@ void nazeROS::imuCallback(const ros::TimerEvent& event)
   }
 }
 
+void nazeROS::gpsCallback(const ros::TimerEvent &event){
+  if(!getGPS()){
+    ROS_ERROR_STREAM("GPS receive error");
+  }
+}
 
-void nazeROS::rcCallback(const ros::TimerEvent& event)
-{
+
+void nazeROS::rcCallback(const ros::TimerEvent& event){
   if(!sendRC()){
     ROS_ERROR_STREAM("RC Send Error");
   }
 }
 
-bool nazeROS::calibrateIMU()
-{
-  MSP_->calibrateIMU();
+bool nazeROS::calibrateIMU(){
+  return MSP_->calibrateIMU();
 }
 
 
-bool nazeROS::calibrateRC()
-{
+bool nazeROS::calibrateRC(){
   bool success;
   RC read_rc_commands;
   double sum[4] = {0.0, 0.0,0.0,0.0};
@@ -199,8 +220,7 @@ bool nazeROS::calibrateRC()
   return true;
 }
 
-bool nazeROS::sendRC()
-{
+bool nazeROS::sendRC(){
   SetRawRC outgoing_rc_commands;
   for(int i=0; i<8; i++){
     outgoing_rc_commands.rcData[i] = rc_commands_[i];
@@ -209,8 +229,7 @@ bool nazeROS::sendRC()
   //return getRC();
 }
 
-bool nazeROS::setPID(PIDitem roll, PIDitem pitch, PIDitem yaw)
-{
+bool nazeROS::setPID(PIDitem roll, PIDitem pitch, PIDitem yaw){
   SetPID outgoing_PID_command;
   for(int i = 0; i<10; i++){
     if(i == ROLL){
@@ -235,8 +254,7 @@ bool nazeROS::setPID(PIDitem roll, PIDitem pitch, PIDitem yaw)
   return getPID();
 }
 
-bool nazeROS::getRC()
-{
+bool nazeROS::getRC(){
   RC actual_rc_commands;
   bool success = MSP_->getRC(actual_rc_commands);
   ROS_INFO_STREAM("RC Commands:");
@@ -246,14 +264,62 @@ bool nazeROS::getRC()
   return true;
 }
 
+bool nazeROS::getStatus(){
+  Status receivedStatus;
+  memset(&receivedStatus, 0, sizeof(receivedStatus));
+  bool received = MSP_->getStatus(receivedStatus);
+  if(received){
+    int cycle_time = (int)receivedStatus.cycle_time;
+    int i2c_errors = (int)receivedStatus.i2c_errors_count;
+    ROS_INFO_STREAM("cycle time = " << cycle_time << "us, i2c_errors = " << i2c_errors);
+    return true;
+  }else{
+    return false;
+  }
+}
 
-bool nazeROS::getImu()
-{
+geometry_msgs::Quaternion nazeROS::getAttitude(){
+  Attitude receivedAttitude;
+  geometry_msgs::Quaternion orientation;
+  memset(&receivedAttitude, 0, sizeof(receivedAttitude));
+  bool received = MSP_->getAttitude(receivedAttitude);
+  if(received){
+    double roll = (double)receivedAttitude.angx/10.0;
+    double pitch = (double)receivedAttitude.angy/10.0;
+    double yaw = (double)receivedAttitude.heading;
+    tf::Matrix3x3 R;
+    R.setEulerYPR(yaw, pitch, roll);
+    tf::Quaternion tf_orientation;
+    R.getRotation(tf_orientation);
+    tf::quaternionTFToMsg(tf_orientation, orientation);
+  }
+  return orientation;
+}
+
+bool nazeROS::getGPS(){
+  naze_ros::GPS GPS_msg;
+  RawGPS receivedGPS;
+  memset(&receivedGPS, 0, sizeof(receivedGPS));
+  bool received = MSP_->getGPS(receivedGPS);
+  if(received){
+    GPS_msg.fix = (bool)receivedGPS.GPS_FIX;
+    GPS_msg.NumSat = (int)receivedGPS.GPS_NumSat;
+    GPS_msg.latitude = (double)receivedGPS.GPS_lat/10000000.0;
+    GPS_msg.longitude = (double)receivedGPS.GPS_lon/10000000.0;
+    GPS_msg.altitude = (double)receivedGPS.GPS_altitude;
+    GPS_msg.speed = (double)receivedGPS.GPS_speed/100.0;
+    GPS_publisher_.publish(GPS_msg);
+    return true;
+  }else{
+    return false;
+  }
+}
+
+
+bool nazeROS::getImu(){
   RawIMU receivedIMUdata;
   memset(&receivedIMUdata, 0, sizeof(receivedIMUdata));
   bool received = MSP_->getRawIMU(receivedIMUdata);
-//  RC receivedRCdata;
-//  bool received = MSP_->getRC(receivedRCdata);
   if(received){
     Imu_.linear_acceleration.x = (double)receivedIMUdata.accx/512.0*9.80665;
     Imu_.linear_acceleration.y = -1.0*(double)receivedIMUdata.accy/512.0*9.80665;
@@ -261,6 +327,9 @@ bool nazeROS::getImu()
     Imu_.angular_velocity.x = (double)receivedIMUdata.gyrx*0.001065264; // 2^15 = 2000 deg/s
     Imu_.angular_velocity.y = -1.0*(double)receivedIMUdata.gyry*0.001065264;
     Imu_.angular_velocity.z = -1.0*(double)receivedIMUdata.gyrz*0.001065264;
+    if(get_imu_attitude_){
+      Imu_.orientation = getAttitude();
+    }
     Imu_.header.stamp = ros::Time::now();
     Imu_publisher_.publish(Imu_);
     return true;
@@ -288,8 +357,7 @@ bool nazeROS::getPID(){
   }
 }
 
-bool nazeROS::loadRCFromParam()
-{
+bool nazeROS::loadRCFromParam(){
   int max_ail, max_ele, max_rud, max_thr;
   int min_ail, min_ele, min_rud, min_thr;
   int mid_ail, mid_ele, mid_rud, mid_thr;
@@ -331,8 +399,7 @@ bool nazeROS::loadRCFromParam()
   return true;
 }
 
-void nazeROS::gainCallback(naze_ros::GainConfig &config, uint32_t level)
-{
+void nazeROS::gainCallback(naze_ros::GainConfig &config, uint32_t level){
   PIDitem new_roll, new_pitch, new_yaw;
   new_roll.P = config.rollP;
   new_roll.I = config.rollI;

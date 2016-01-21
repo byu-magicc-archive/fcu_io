@@ -7,6 +7,9 @@
 #include <dynamic_reconfigure/server.h>
 #include <sensor_msgs/Imu.h>
 #include <std_msgs/Bool.h>
+#include <tf/tf.h>
+#include <naze_ros/Command.h>
+#include <naze_ros/GPS.h>
 
 #include "serial/msp.h"
 #include "serial/mspdata.h"
@@ -45,9 +48,11 @@ public:
   ~nazeROS();
   void imuCallback(const ros::TimerEvent& event);
   void rcCallback(const ros::TimerEvent& event);
-  void RPYCallback(const relative_nav::CommandConstPtr &msg);
+  void RNCommandCallback(const relative_nav::CommandConstPtr &msg);
+  void commandCallback(const naze_ros::CommandConstPtr &msg);
   void calibrationCallback(const std_msgs::BoolConstPtr &msg);
   void armCallback(const std_msgs::BoolConstPtr &msg);
+  void gpsCallback(const ros::TimerEvent& event);
 
 private:
 
@@ -60,8 +65,10 @@ private:
   ros::Subscriber RC_calibration_subscriber_;
   ros::Subscriber arm_subscriber_;
   ros::Publisher Imu_publisher_;
+  ros::Publisher GPS_publisher_;
   ros::Timer imu_pub_timer_;
   ros::Timer rc_send_timer_;
+  ros::Timer gps_pub_timer_;
 
   // Gain controller
   dynamic_reconfigure::Server<naze_ros::GainConfig> server_;
@@ -75,6 +82,7 @@ private:
   double max_pitch_;
   double max_yaw_rate_;
   double max_throttle_;
+  bool get_imu_attitude_;
 
   // Local Variables
   std::vector<uint16_t> rc_commands_;
@@ -86,6 +94,7 @@ private:
   std::vector<PIDitem> PIDs_;
   bool armed_;
   bool acro_;
+  naze_ros::Command command_;
 
   // Functions
   bool getImu();
@@ -95,6 +104,9 @@ private:
   bool calibrateRC();
   bool loadRCFromParam();
   bool getPID();
+  bool getGPS();
+  bool getStatus();
+  geometry_msgs::Quaternion getAttitude();
   bool setPID(PIDitem roll, PIDitem pitch, PIDitem yaw);
 
   int sat(int input, int min, int max);
