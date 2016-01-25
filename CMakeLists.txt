@@ -9,6 +9,18 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   cmake_modules
   dynamic_reconfigure
+  tf
+)
+
+add_message_files(
+  FILES
+  GPS.msg
+  Command.msg
+)
+
+generate_messages( 
+  DEPENDENCIES
+  std_msgs 
 )
 
 generate_dynamic_reconfigure_options(
@@ -52,7 +64,7 @@ add_executable(naze_ros_node
 )
 
 ## Add cmake target dependencies of the executable/library
-add_dependencies(naze_ros_node relative_nav_generate_messages_cpp)
+add_dependencies(naze_ros_node relative_nav_generate_messages_cpp naze_ros_generate_messages_cpp)
 add_dependencies(naze_ros_node serial_lib)
 
 target_link_libraries(naze_ros_node serial_lib

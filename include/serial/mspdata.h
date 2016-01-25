@@ -14,6 +14,18 @@
 #define MAG 8
 #define VEL 9
 
+struct RawGPS
+{
+  const static uint8_t type = 106;
+  uint8_t GPS_FIX;
+  uint8_t GPS_NumSat;
+  uint32_t GPS_lat;
+  uint32_t GPS_lon;
+  uint16_t GPS_altitude;
+  uint16_t GPS_speed;
+  uint16_t GPS_ground_course;
+};
+
 struct PID
 {
   const static uint8_t type = 112;

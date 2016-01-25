@@ -21,6 +21,8 @@ public:
   bool setRawRC(SetRawRC& message);
   bool getRC(RC& message);
   bool getPID(PID& message);
+  bool getStatus(Status& message);
+  bool getGPS(RawGPS& message);
   bool setPID(SetPID& message);
 
 
@@ -34,6 +36,8 @@ private:
   bool receive(Attitude& message);
   bool send(SetPID& command);
   bool receive(PID& message);
+  bool receive(RawGPS& message);
+  bool receive(Status& message);
 
   // unspecific communication functions
   bool acknowledge(u_int8_t code);
