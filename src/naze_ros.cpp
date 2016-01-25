@@ -45,7 +45,7 @@ nazeROS::nazeROS() :
   arm_subscriber_ = nh_.subscribe("arm", 1, &nazeROS::armCallback, this);
   imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0/imu_pub_rate), &nazeROS::imuCallback, this);
   rc_send_timer_ = nh_.createTimer(ros::Duration(1.0/rc_send_rate), &nazeROS::rcCallback, this);
-  gps_pub_timer_ = nh_.createTimer(ros::Duration(1.0), &nazeROS::gpsCallback, this);
+  //gps_pub_timer_ = nh_.createTimer(ros::Duration(1.0), &nazeROS::gpsCallback, this);
 
   // setup publishers
   Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
@@ -75,11 +75,11 @@ nazeROS::nazeROS() :
   Imu_.angular_velocity_covariance = ang_covariance;
   Imu_.linear_acceleration_covariance = lin_covariance;
 
-  if(calibrateIMU()){
-    ROS_INFO("IMU calibration successful");
-  }else{
-    ROS_ERROR("IMU calibration unsuccessful");
-  }
+//  if(calibrateIMU()){
+//    ROS_INFO("IMU calibration successful");
+//  }else{
+//    ROS_ERROR("IMU calibration unsuccessful");
+//  }
   getPID();
 
   // dynamic reconfigure
@@ -102,10 +102,11 @@ void nazeROS::calibrationCallback(const std_msgs::BoolConstPtr &msg){
   }
 }
 
-void nazeROS::armCallback(const std_msgs::BoolConstPtr &msg)
-{
+
+void nazeROS::armCallback(const std_msgs::BoolConstPtr &msg){
   armed_ = msg->data;
 }
+
 
 void nazeROS::RNCommandCallback(const relative_nav::CommandConstPtr &msg){
   command_.roll = msg->roll;
@@ -113,10 +114,11 @@ void nazeROS::RNCommandCallback(const relative_nav::CommandConstPtr &msg){
   command_.yaw_rate = msg->yaw_rate;
   command_.thrust = msg->thrust;
   command_.angle_mode = true;
-  naze_ros::Command* p = & command_;
-  naze_ros::CommandConstPtr command(p);
-  commandCallback(command);
+//  naze_ros::Command* p = & command_;
+//  naze_ros::CommandConstPtr command(p);
+  //commandCallback(command);
 }
+
 
 void nazeROS::commandCallback(const naze_ros::CommandConstPtr &msg){
   int aux1(0.0), aux2(0.0), aux3(0.0), aux4(0.0);
@@ -145,8 +147,8 @@ void nazeROS::commandCallback(const naze_ros::CommandConstPtr &msg){
   }
 }
 
-void nazeROS::imuCallback(const ros::TimerEvent& event)
-{
+
+void nazeROS::imuCallback(const ros::TimerEvent& event){
   if(!getImu()){
     ROS_ERROR_STREAM("IMU receive error");
   }
@@ -164,6 +166,7 @@ void nazeROS::rcCallback(const ros::TimerEvent& event){
     ROS_ERROR_STREAM("RC Send Error");
   }
 }
+
 
 bool nazeROS::calibrateIMU(){
   return MSP_->calibrateIMU();
@@ -278,9 +281,9 @@ bool nazeROS::getStatus(){
   }
 }
 
-geometry_msgs::Quaternion nazeROS::getAttitude(){
+void nazeROS::getAttitude(geometry_msgs::Quaternion & orientation){
+//  ROS_INFO("getting attitude");
   Attitude receivedAttitude;
-  geometry_msgs::Quaternion orientation;
   memset(&receivedAttitude, 0, sizeof(receivedAttitude));
   bool received = MSP_->getAttitude(receivedAttitude);
   if(received){
@@ -293,7 +296,7 @@ geometry_msgs::Quaternion nazeROS::getAttitude(){
     R.getRotation(tf_orientation);
     tf::quaternionTFToMsg(tf_orientation, orientation);
   }
-  return orientation;
+//  ROS_INFO("done getting attitude");
 }
 
 bool nazeROS::getGPS(){
@@ -328,7 +331,7 @@ bool nazeROS::getImu(){
     Imu_.angular_velocity.y = -1.0*(double)receivedIMUdata.gyry*0.001065264;
     Imu_.angular_velocity.z = -1.0*(double)receivedIMUdata.gyrz*0.001065264;
     if(get_imu_attitude_){
-      Imu_.orientation = getAttitude();
+      getAttitude(Imu_.orientation);
     }
     Imu_.header.stamp = ros::Time::now();
     Imu_publisher_.publish(Imu_);
