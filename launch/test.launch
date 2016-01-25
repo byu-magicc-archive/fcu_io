@@ -5,9 +5,11 @@
  <rosparam subst_value="True">
   xbox:           { deadzone: 0.15,
                     autorepeat_rate: 10}
-  naze:           { imu_pub_rate: 100.0,
+  naze:           { imu_pub_rate: 250.0,
                     rc_send_rate: 50.0,
-                    timeout: 20 }
+                    timeout: 1,
+                    enable_GPS: false,
+                    baudrate: 57600 }
 
  </rosparam>  
 

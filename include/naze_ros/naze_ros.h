@@ -106,7 +106,7 @@ private:
   bool getPID();
   bool getGPS();
   bool getStatus();
-  geometry_msgs::Quaternion getAttitude();
+  void getAttitude(geometry_msgs::Quaternion &orientation);
   bool setPID(PIDitem roll, PIDitem pitch, PIDitem yaw);
 
   int sat(int input, int min, int max);
