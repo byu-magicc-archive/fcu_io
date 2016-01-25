@@ -1,14 +1,14 @@
 naze: {
-  roll: { max: 2010,
-          min: 1004,
-          center: 1494 },
-  pitch: { max: 2001,
-           min: 978,
-           center: 1464 },
-  throttle: { max: 2008,
-              min: 990,
-              center: 999 },
-  yaw: { max: 2012,
-         min: 1008,
-         center: 1499 }
+  roll: { max: 2005,
+          min: 1003,
+          center: 1493 },
+  pitch: { max: 1971,
+           min: 968,
+           center: 1498 },
+  throttle: { max: 2000,
+              min: 1002,
+              center: 1002 },
+  yaw: { max: 2019,
+         min: 1019,
+         center: 1508 }
 }
