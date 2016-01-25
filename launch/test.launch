@@ -9,17 +9,18 @@
                     rc_send_rate: 50.0,
                     timeout: 1,
                     enable_GPS: false,
-                    baudrate: 57600 }
+                    baudrate: 115200,
+                    get_imu_attitude: false }
 
  </rosparam>  
 
  <!-- Joystick -->
- <rosparam command="load" file="$(find joy_commander)/params/ps2.yaml"/>
+<!--  <rosparam command="load" file="$(find joy_commander)/params/ps2.yaml"/>
   <node name="xbox"                pkg="joy"                 type="joy_node"/>
  <node name="joy_sim" pkg="joy_sim" type="joy_sim" >
     <rosparam command="load" file="$(find relative_nav)/param/$(arg mav_name).yaml"/>
     <rosparam command="load" file="$(find relative_nav)/param/xbox.yaml"/>
-  </node>
+  </node> -->
 
  <rosparam command="load" file="$(find naze_ros)/param/rc.yaml"/>
  <node name="naze"                pkg="naze_ros"            type="naze_ros_node" output="screen">

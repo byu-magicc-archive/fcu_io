@@ -75,11 +75,13 @@ nazeROS::nazeROS() :
   Imu_.angular_velocity_covariance = ang_covariance;
   Imu_.linear_acceleration_covariance = lin_covariance;
 
-//  if(calibrateIMU()){
-//    ROS_INFO("IMU calibration successful");
-//  }else{
-//    ROS_ERROR("IMU calibration unsuccessful");
-//  }
+
+  ROS_INFO("calibrating IMU");
+  if(calibrateIMU()){
+    ROS_INFO("IMU calibration successful");
+  }else{
+    ROS_ERROR("IMU calibration unsuccessful");
+  }
   getPID();
 
   // dynamic reconfigure
