@@ -14,7 +14,7 @@
  <node name="naze"                pkg="fcu_io"            type="fcu_io_node" output="screen">
  	<param name="serial_port" value="/dev/ttyUSB0"/>
  </node>
- <node name="controller"          pkg="rotor_sim_joy"       type="rotor_sim_joy"/>
+ <!--<node name="controller"          pkg="rotor_sim_joy"       type="rotor_sim_joy"/>-->
 
 </launch>
 

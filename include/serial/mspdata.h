@@ -52,7 +52,9 @@ enum class Command : uint8_t
   MSP_SELECT_SETTING = 210,
   MSP_SET_HEAD = 211,
   MSP_BIND = 240,
-  MSP_EEPROM_WRITE = 250
+  MSP_EEPROM_WRITE = 250,
+  MSP_RAW_AIRSPEED = 125,
+  MSP_SONAR_ALTITUDE = 55
 };
 
 struct PID
@@ -151,7 +153,20 @@ struct Altitude
   int16_t vario;
 } __attribute__((packed));
 
+struct Airspeed
+{
+  const static uint8_t type = 125;
+  int16_t airspeed;
+  int16_t temp;
+} __attribute__((packed));
+
 struct AccCalibration
 {
   const static uint8_t type = 205;
 } __attribute__((packed));
+
+struct Sonar
+{
+    const static uint8_t type = 58;
+    int32_t distance;
+}__attribute__((packed));

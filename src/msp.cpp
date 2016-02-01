@@ -32,10 +32,36 @@ bool MSP::getRawIMU(RawIMU &message)
     return false;
   }
 }
+bool MSP::getRawAirspeed(Airspeed &message)
+{
+  if(request(Airspeed::type)){
+    return receive(message);
+  }else{
+    return false;
+  }
+}
 
 bool MSP::getAttitude(Attitude& message)
 {
   if(request(Attitude::type)){
+    return receive(message);
+  }else{
+    return false;
+  }
+}
+
+bool MSP::getAltitude(Altitude& message)
+{
+  if(request(Altitude::type)){
+    return receive(message);
+  }else{
+    return false;
+  }
+}
+
+bool MSP::getSonar(Sonar& message)
+{
+  if(request(Sonar::type)){
     return receive(message);
   }else{
     return false;
@@ -127,6 +153,40 @@ bool MSP::receive(Attitude& message)
   }
 }
 
+bool MSP::receive(Airspeed& message)
+{
+  u_int8_t size = sizeof(Airspeed);
+  u_int8_t code = (u_int8_t)Airspeed::type;
+  u_int8_t data[size];
+  if(receive(code, size, data))
+  {
+    message.airspeed = (int16_t)(((data[1] & 0xFF) << 8) | (data[0] & 0xFF));
+    message.temp = (int16_t)(((data[3] & 0xFF) << 8) | (data[2] & 0xFF));
+  }
+}
+
+bool MSP::receive(Altitude& message)
+{
+  u_int8_t size = sizeof(Altitude);
+  u_int8_t code = (u_int8_t)Altitude::type;
+  u_int8_t data[size];
+  if(receive(code, size, data))
+  {
+    message.estAlt = (int32_t)(((data[3] & 0xFF) << 24) | ((data[2] & 0xFF) << 16) | ((data[1] & 0xFF) << 8) | (data[0] & 0xFF));
+    message.vario = (int16_t)(((data[5] & 0xFF) << 8) | (data[4] & 0xFF));
+  }
+}
+
+bool MSP::receive(Sonar& message)
+{
+  u_int8_t size = sizeof(Sonar);
+  u_int8_t code = (u_int8_t)Sonar::type;
+  u_int8_t data[size];
+  if(receive(code, size, data))
+  {
+    message.distance = (int32_t)(((data[3] & 0xFF) << 24) | ((data[2] & 0xFF) << 16) | ((data[1] & 0xFF) << 8) | (data[0] & 0xFF));
+  }
+}
 
 bool MSP::receive(RC &message)
 {

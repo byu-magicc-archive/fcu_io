@@ -1,13 +1,13 @@
 #include <ros/ros.h>
-#include "naze_ros/naze_ros.h"
+#include "fcu_io/fcu_io.h"
 
 int main(int argc, char** argv)
 {
 
-  ros::init(argc, argv, "naze_ros_node");
+  ros::init(argc, argv, "fcu_io_node");
   ros::NodeHandle nh;
 
-  naze_ros::nazeROS Naze32;
+  fcu_io::fcuIO Naze32;
 
   ros::spin();
 

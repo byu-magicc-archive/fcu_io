@@ -22,6 +22,9 @@ public:
   bool getRC(RC& message);
   bool getPID(PID& message);
   bool setPID(SetPID& message);
+  bool getRawAirspeed(Airspeed& message);
+  bool getAltitude(Altitude& message);
+  bool getSonar(Sonar& message);
 
 
 private:
@@ -34,6 +37,9 @@ private:
   bool receive(Attitude& message);
   bool send(SetPID& command);
   bool receive(PID& message);
+  bool receive(Airspeed& message);
+  bool receive(Altitude& message);
+  bool receive(Sonar& message);
 
   // unspecific communication functions
   bool acknowledge(u_int8_t code);
