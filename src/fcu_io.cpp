@@ -35,21 +35,41 @@ fcuIO::fcuIO() :
   timeout.write_timeout_constant = 2;
   MSP_ = new MSP(serial_port, (u_int32_t)baudrate, timeout);
 
-  // Set up Callbacks
+  uint16_t sensors;
+  int cycle_time;
+  int i2c_errors;
+  ROS_ASSERT(getStatus(sensors, cycle_time, i2c_errors));
+
+  // Set up Callbacks and publishers if sensors are present
   Command_subscriber_ = nh_.subscribe("command", 1, &fcuIO::RPYCallback, this);
   RC_calibration_subscriber_ = nh_.subscribe("calibrate", 1, &fcuIO::calibrationCallback, this);
-  imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0/imu_pub_rate), &fcuIO::imuCallback, this);
   rc_send_timer_ = nh_.createTimer(ros::Duration(1.0/rc_send_rate), &fcuIO::rcCallback, this);
-  as_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::asCallback, this);
-  alt_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::altCallback, this);
-  sonar_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::sonarCallback, this);
 
-  // setup publishers
-  Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
-  Mag_publisher_ = nh_.advertise<sensor_msgs::MagneticField>("mag/data", 1);
-  Baro_alt_publisher_ = nh_.advertise<std_msgs::Float32>("baro/alt",1);
-  Airspeed_publisher_ = nh_.advertise<sensor_msgs::FluidPressure>("airspeed/data", 1);
-  Sonar_publisher_ = nh_.advertise<sensor_msgs::Range>("sonar/data", 1);
+  if(sensors & SENSOR_ACC)
+  {
+      imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0/imu_pub_rate), &fcuIO::imuCallback, this);
+      Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
+  }
+  if(sensors & SENSOR_MAG)
+  {
+      have_mag_ = true;
+      Mag_publisher_ = nh_.advertise<sensor_msgs::MagneticField>("mag/data", 1);
+  }
+  if(sensors & SENSOR_AIRSPEED)
+  {
+      as_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::asCallback, this);
+      Airspeed_publisher_ = nh_.advertise<sensor_msgs::FluidPressure>("airspeed/data", 1);
+  }
+  if(sensors & SENSOR_BARO)
+  {
+      alt_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::altCallback, this);
+      Baro_alt_publisher_ = nh_.advertise<std_msgs::Float32>("baro/alt",1);
+  }
+  if(sensors & SENSOR_SONAR)
+  {
+      sonar_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::sonarCallback, this);
+      Sonar_publisher_ = nh_.advertise<sensor_msgs::Range>("sonar/data", 1);
+  }
 
   // initialize RC variables
   center_sticks_.resize(8);
@@ -152,7 +172,7 @@ void fcuIO::rcCallback(const ros::TimerEvent& event)
 }
 
 
-bool nazeROS::calibrateIMU(){
+bool fcuIO::calibrateIMU(){
   return MSP_->calibrateIMU();
 }
 
@@ -245,12 +265,6 @@ void fcuIO::sonarCallback(const ros::TimerEvent& event)
   } else{
         ROS_ERROR_STREAM("Sonar receive error");
   }
-}
-
-
-bool fcuIO::calibrateIMU()
-{
-  MSP_->calibrateIMU();
 }
 
 
@@ -356,14 +370,14 @@ bool fcuIO::getRC()
 }
 
 
-bool nazeROS::getStatus(){
+bool fcuIO::getStatus(uint16_t &sensors, int &cycle_time, int& i2c_errors){
   Status receivedStatus;
   memset(&receivedStatus, 0, sizeof(receivedStatus));
   bool received = MSP_->getStatus(receivedStatus);
   if(received){
-    int cycle_time = (int)receivedStatus.cycle_time;
-    int i2c_errors = (int)receivedStatus.i2c_errors_count;
-    ROS_INFO_STREAM("cycle time = " << cycle_time << "us, i2c_errors = " << i2c_errors);
+    cycle_time = (int)receivedStatus.cycle_time;
+    i2c_errors = (int)receivedStatus.i2c_errors_count;
+    sensors = receivedStatus.sensor;
     return true;
   }else{
     return false;
@@ -371,7 +385,7 @@ bool nazeROS::getStatus(){
 }
 
 
-void nazeROS::getAttitude(geometry_msgs::Quaternion & orientation){
+void fcuIO::getAttitude(geometry_msgs::Quaternion & orientation){
 //  ROS_INFO("getting attitude");
   Attitude receivedAttitude;
   memset(&receivedAttitude, 0, sizeof(receivedAttitude));
@@ -412,7 +426,8 @@ bool fcuIO::getImu()
     mag.magnetic_field.x = receivedIMUdata.magx;
     mag.magnetic_field.y = receivedIMUdata.magy;
     mag.magnetic_field.z = receivedIMUdata.magz;
-    Mag_publisher_.publish(mag);
+    if(have_mag_)
+        Mag_publisher_.publish(mag);
     //ROS_INFO_STREAM(receivedIMUdata.magx << " " << receivedIMUdata.magy << " " << receivedIMUdata.magz);
 
     return true;

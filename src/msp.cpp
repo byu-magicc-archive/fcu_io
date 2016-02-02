@@ -14,13 +14,6 @@ bool MSP::getStatus(Status &message){
   }
 }
 
-bool MSP::getGPS(RawGPS &message){
-  if(request(RawGPS::type)){
-    return receive(message);
-  }else{
-    return false;
-  }
-}
 
 bool MSP::getPID(PID& message)
 {
@@ -120,43 +113,6 @@ bool MSP::calibrateIMU()
   }
 }
 
-bool MSP::receive(Status &message){
-  uint8_t size = sizeof(Status);
-  uint8_t code = (uint8_t)Status::type;
-  uint8_t data[size];
-  if(receive(code, size, data)) {
-    message.cycle_time = (uint16_t)(((data[1] & 0xFF) << 8) | (data[0] & 0xFF));
-    message.i2c_errors_count = (uint16_t)(((data[3] & 0xFF) << 8) | (data[2] & 0xFF));
-    message.sensor = (uint16_t)(((data[5] & 0xFF) << 8) | (data[4] & 0xFF));
-    message.flag = (uint32_t)(((data[9] & 0xFF) << 24) | (data[8] & 0xFF << 16)
-                            | (data[7] & 0xFF) << 8   | (data[6] & 0xFF));
-    message.current_set = data[10];
-    return true;
-  }else{
-    return false;
-  }
-}
-
-bool MSP::receive(RawGPS &message){
-  uint8_t size = sizeof(RawGPS);
-  uint8_t code = (uint8_t)RawGPS::type;
-  uint8_t data[size];
-  if(receive(code, size, data)){
-    message.GPS_FIX = data[0];
-    message.GPS_NumSat = data[1];
-    message.GPS_lat = (uint32_t)(((data[5] & 0xFF) << 24) | (data[4] & 0xFF << 16)
-                               | (data[3] & 0xFF) << 8   | (data[2] & 0xFF));
-    message.GPS_lat = (uint32_t)(((data[9] & 0xFF) << 24) | (data[8] & 0xFF << 16)
-                               | (data[7] & 0xFF) << 8   | (data[6] & 0xFF));
-    message.GPS_altitude = (uint16_t)(((data[11] & 0xFF) << 8) | (data[10] & 0xFF));
-    message.GPS_speed = (uint16_t)(((data[13] & 0xFF) << 8) | (data[12] & 0xFF));
-    message.GPS_ground_course = (uint16_t)(((data[15] & 0xFF) << 8) | (data[14] & 0xFF));
-    return true;
-  }else{
-    return false;
-  }
-}
-
 bool MSP::receive(PID &message)
 {
   uint8_t size = sizeof(PID);
@@ -174,6 +130,22 @@ bool MSP::receive(PID &message)
   }
 }
 
+bool MSP::receive(Status& message)
+{
+  u_int8_t size = sizeof(Status);
+  u_int8_t code = (u_int8_t)Status::type;
+  u_int8_t data[size];
+  if(receive(code, size, data))  {
+    message.cycle_time = (int16_t)(((data[1] & 0xFF) << 8) | (data[0] & 0xFF));
+    message.i2c_errors_count = (int16_t)(((data[3] & 0xFF) << 8) | (data[2] & 0xFF));
+    message.sensor = (int16_t)(((data[5] & 0xFF) << 8) | (data[4] & 0xFF));
+    message.flag = (int32_t)(((data[9] & 0xFF) << 24) | ((data[8] & 0xFF) << 16) | ((data[7] & 0xFF) << 8) | (data[6] & 0xFF));
+    message.current_set = (int16_t)(((data[11] & 0xFF) << 8) | (data[10] & 0xFF));
+    return true;
+  } else {
+    return false;
+  }
+}
 
 bool MSP::receive(RawIMU& message)
 {

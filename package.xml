@@ -15,11 +15,8 @@
   <build_depend>rospy</build_depend>
   <build_depend>std_msgs</build_depend>
   <build_depend>dynamic_reconfigure</build_depend>
-<<<<<<< HEAD
   <build_depend>tf</build_depend>
-=======
   <build_depend>message_generation</build_depend>
->>>>>>> 45e1fad110768a0feeef6a00ad6c76e146d3b0ce
 
   <run_depend>message_runtime</run_depend>
   <run_depend>sensor_msgs</run_depend>

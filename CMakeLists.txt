@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   cmake_modules
   dynamic_reconfigure
   tf
+  message_generation
 )
 
 add_message_files(
@@ -21,7 +22,6 @@ add_message_files(
 generate_messages( 
   DEPENDENCIES
   std_msgs 
-  message_generation
 )
 
 generate_dynamic_reconfigure_options(

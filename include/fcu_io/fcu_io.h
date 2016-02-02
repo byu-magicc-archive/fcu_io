@@ -31,6 +31,17 @@
 namespace fcu_io
 {
 
+typedef enum {
+//    SENSOR_GYRO = 1 << 0, // always present
+    SENSOR_ACC = 1 << 0, // almost always present
+    SENSOR_BARO = 1 << 1,
+    SENSOR_MAG = 1 << 2,
+    SENSOR_GPS = 1 << 3,
+    SENSOR_SONAR = 1 << 4,
+    SENSOR_AIRSPEED = 1 << 5,
+} sensors_e;
+
+
 struct PIDitem{
   double P;
   double I;
@@ -106,7 +117,7 @@ private:
   std::vector<PIDitem> PIDs_;
   bool armed_;
   bool acro_;
-  naze_ros::Command command_;
+  bool have_mag_;
 
   // Functions
   bool getImu();
@@ -118,7 +129,7 @@ private:
   bool loadRCFromParam();
   bool getPID();
   bool getGPS();
-  bool getStatus();
+  bool getStatus(uint16_t &sensors, int &cycle_time, int &i2c_errors);
   void getAttitude(geometry_msgs::Quaternion &orientation);
   bool setPID(PIDitem roll, PIDitem pitch, PIDitem yaw);
 

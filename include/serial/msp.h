@@ -15,14 +15,13 @@ class MSP
 public:
   MSP(std::string port, uint32_t baud, serial::Timeout timeout);
 
+  bool getStatus(Status& message);
   bool getRawIMU(RawIMU& message);
   bool calibrateIMU();
   bool getAttitude(Attitude& message);
   bool setRawRC(SetRawRC& message);
   bool getRC(RC& message);
   bool getPID(PID& message);
-  bool getStatus(Status& message);
-  bool getGPS(RawGPS& message);
   bool setPID(SetPID& message);
   bool getRawAirspeed(Airspeed& message);
   bool getAltitude(Altitude& message);
@@ -39,7 +38,6 @@ private:
   bool receive(Attitude& message);
   bool send(SetPID& command);
   bool receive(PID& message);
-  bool receive(RawGPS& message);
   bool receive(Status& message);
   bool receive(Airspeed& message);
   bool receive(Altitude& message);
