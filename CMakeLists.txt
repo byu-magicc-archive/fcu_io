@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(naze_ros)
+project(fcu_io)
 
 find_package(catkin REQUIRED COMPONENTS
-  relative_nav
   sensor_msgs
+  std_msgs
   roscpp
   rospy
   std_msgs
@@ -21,6 +21,7 @@ add_message_files(
 generate_messages( 
   DEPENDENCIES
   std_msgs 
+  message_generation
 )
 
 generate_dynamic_reconfigure_options(
@@ -31,6 +32,7 @@ catkin_package(
     LIBRARIES ${PROJECT_NAME}
     INCLUDE_DIRS include
     DEPENDS rt pthread dynamic_reconfigure
+    CATKIN_DEPENDS message_runtime
 )
 
 ###########
@@ -53,20 +55,20 @@ include_directories(${dynamic_reconfigure_PACKAGE_PATH}/cmake/cfgbuild.cmake)
 target_link_libraries(serial_lib rt pthread)
 
 ## Declare a cpp executable
-add_executable(naze_ros_node 
-    src/naze_ros_node.cpp
-    src/naze_ros.cpp
+add_executable(fcu_io_node
+    src/fcu_io_node.cpp
+    src/fcu_io.cpp
     src/msp.cpp
     src/mspdata.cpp
-    include/naze_ros/naze_ros.h
+    include/fcu_io/fcu_io.h
     include/serial/msp.h
     include/serial/mspdata.h
 )
 
 ## Add cmake target dependencies of the executable/library
-add_dependencies(naze_ros_node relative_nav_generate_messages_cpp naze_ros_generate_messages_cpp)
-add_dependencies(naze_ros_node serial_lib)
+add_dependencies(fcu_io_node fcu_io_generate_messages_cpp)
+add_dependencies(fcu_io_node serial_lib)
 
-target_link_libraries(naze_ros_node serial_lib
+target_link_libraries(fcu_io_node serial_lib
   ${catkin_LIBRARIES}
 )

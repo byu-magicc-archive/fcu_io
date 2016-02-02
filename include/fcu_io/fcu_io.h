@@ -1,11 +1,15 @@
-#ifndef NAZE_ROS_H
-#define NAZE_ROS_H
+#ifndef FCU_IO_H
+#define FCU_IO_H
 
 #include <ros/ros.h>
-#include <relative_nav/Command.h>
-#include <naze_ros/GainConfig.h>
+#include <fcu_io/Command.h>
+#include <fcu_io/GainConfig.h>
 #include <dynamic_reconfigure/server.h>
 #include <sensor_msgs/Imu.h>
+#include <sensor_msgs/MagneticField.h>
+#include <sensor_msgs/Range.h>
+#include <sensor_msgs/FluidPressure.h>
+#include <std_msgs/Float32.h>
 #include <std_msgs/Bool.h>
 #include <tf/tf.h>
 #include <naze_ros/Command.h>
@@ -24,7 +28,7 @@
 #define RC_ARM 6
 #define RC_ACRO 7
 
-namespace naze_ros
+namespace fcu_io
 {
 
 struct PIDitem{
@@ -39,19 +43,21 @@ struct PIDitem{
 };
 
 
-class nazeROS
+class fcuIO
 {
 
 public:
 
-  nazeROS();
-  ~nazeROS();
+  fcuIO();
+  ~fcuIO();
   void imuCallback(const ros::TimerEvent& event);
   void rcCallback(const ros::TimerEvent& event);
-  void RNCommandCallback(const relative_nav::CommandConstPtr &msg);
-  void commandCallback(const naze_ros::CommandConstPtr &msg);
+
+  void asCallback(const ros::TimerEvent& event);
+  void altCallback(const ros::TimerEvent& event);
+  void sonarCallback(const ros::TimerEvent& event);
+  void RPYCallback(const fcu_io::CommandConstPtr &msg);
   void calibrationCallback(const std_msgs::BoolConstPtr &msg);
-  void armCallback(const std_msgs::BoolConstPtr &msg);
   void gpsCallback(const ros::TimerEvent& event);
 
 private:
@@ -60,20 +66,26 @@ private:
   ros::NodeHandle nh_;         //!< public node handle for subscribing, publishing, etc.
   ros::NodeHandle nh_private_; //!< private node handle for pulling parameter values from the parameter server
 
-  // Publishers and Subscribers
+  // Publishers, Subscribers and Timers
   ros::Subscriber Command_subscriber_;
   ros::Subscriber RC_calibration_subscriber_;
-  ros::Subscriber arm_subscriber_;
+
   ros::Publisher Imu_publisher_;
-  ros::Publisher GPS_publisher_;
+  ros::Publisher Mag_publisher_;
+  ros::Publisher Sonar_publisher_;
+  ros::Publisher Baro_alt_publisher_;
+  ros::Publisher Airspeed_publisher_;
+
   ros::Timer imu_pub_timer_;
   ros::Timer rc_send_timer_;
-  ros::Timer gps_pub_timer_;
+  ros::Timer as_pub_timer_;
+  ros::Timer alt_pub_timer_;
+  ros::Timer sonar_pub_timer_;
 
   // Gain controller
-  dynamic_reconfigure::Server<naze_ros::GainConfig> server_;
-  dynamic_reconfigure::Server<naze_ros::GainConfig>::CallbackType func_;
-  void gainCallback(naze_ros::GainConfig &config, uint32_t level);
+  dynamic_reconfigure::Server<fcu_io::GainConfig> server_;
+  dynamic_reconfigure::Server<fcu_io::GainConfig>::CallbackType func_;
+  void gainCallback(fcu_io::GainConfig &config, uint32_t level);
 
   // Parameters
   int min_PWM_output_;
@@ -100,6 +112,7 @@ private:
   bool getImu();
   bool sendRC();
   bool getRC();
+  bool getAS();
   bool calibrateIMU();
   bool calibrateRC();
   bool loadRCFromParam();
@@ -112,6 +125,6 @@ private:
   int sat(int input, int min, int max);
 };
 
-} // namespace naze_ros
+} // namespace fcu_io
 
-#endif // nazeROS_H
+#endif // FCU_IO_H
