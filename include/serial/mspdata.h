@@ -14,18 +14,6 @@
 #define MAG 8
 #define VEL 9
 
-struct RawGPS
-{
-  const static uint8_t type = 106;
-  uint8_t GPS_FIX;
-  uint8_t GPS_NumSat;
-  uint32_t GPS_lat;
-  uint32_t GPS_lon;
-  uint16_t GPS_altitude;
-  uint16_t GPS_speed;
-  uint16_t GPS_ground_course;
-};
-
 struct PID
 {
   const static uint8_t type = 112;
@@ -122,7 +110,20 @@ struct Altitude
   int16_t vario;
 } __attribute__((packed));
 
+struct Airspeed
+{
+  const static uint8_t type = 125;
+  int16_t airspeed;
+  int16_t temp;
+} __attribute__((packed));
+
 struct AccCalibration
 {
   const static uint8_t type = 205;
 } __attribute__((packed));
+
+struct Sonar
+{
+    const static uint8_t type = 58;
+    int32_t distance;
+}__attribute__((packed));

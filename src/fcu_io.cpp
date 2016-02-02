@@ -1,9 +1,9 @@
-#include "naze_ros/naze_ros.h"
+#include "fcu_io/fcu_io.h"
 
-namespace naze_ros
+namespace fcu_io
 {
 
-nazeROS::nazeROS() :
+fcuIO::fcuIO() :
   nh_(ros::NodeHandle()),
   nh_private_(ros::NodeHandle("~"))
 {
@@ -35,20 +35,41 @@ nazeROS::nazeROS() :
   timeout.write_timeout_constant = 2;
   MSP_ = new MSP(serial_port, (u_int32_t)baudrate, timeout);
 
-  // Set up Callbacks
-  if(useRNcallback){
-    Command_subscriber_ = nh_.subscribe("command", 1, &nazeROS::RNCommandCallback, this);
-  }else{
-    Command_subscriber_ = nh_.subscribe("command", 1, &nazeROS::commandCallback, this);
-  }
-  RC_calibration_subscriber_ = nh_.subscribe("calibrate", 1, &nazeROS::calibrationCallback, this);
-  arm_subscriber_ = nh_.subscribe("arm", 1, &nazeROS::armCallback, this);
-  imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0/imu_pub_rate), &nazeROS::imuCallback, this);
-  rc_send_timer_ = nh_.createTimer(ros::Duration(1.0/rc_send_rate), &nazeROS::rcCallback, this);
-  //gps_pub_timer_ = nh_.createTimer(ros::Duration(1.0), &nazeROS::gpsCallback, this);
+  uint16_t sensors;
+  int cycle_time;
+  int i2c_errors;
+  ROS_ASSERT(getStatus(sensors, cycle_time, i2c_errors));
 
-  // setup publishers
-  Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
+  // Set up Callbacks and publishers if sensors are present
+  Command_subscriber_ = nh_.subscribe("command", 1, &fcuIO::RPYCallback, this);
+  RC_calibration_subscriber_ = nh_.subscribe("calibrate", 1, &fcuIO::calibrationCallback, this);
+  rc_send_timer_ = nh_.createTimer(ros::Duration(1.0/rc_send_rate), &fcuIO::rcCallback, this);
+
+  if(sensors & SENSOR_ACC)
+  {
+      imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0/imu_pub_rate), &fcuIO::imuCallback, this);
+      Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
+  }
+  if(sensors & SENSOR_MAG)
+  {
+      have_mag_ = true;
+      Mag_publisher_ = nh_.advertise<sensor_msgs::MagneticField>("mag/data", 1);
+  }
+  if(sensors & SENSOR_AIRSPEED)
+  {
+      as_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::asCallback, this);
+      Airspeed_publisher_ = nh_.advertise<sensor_msgs::FluidPressure>("airspeed/data", 1);
+  }
+  if(sensors & SENSOR_BARO)
+  {
+      alt_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::altCallback, this);
+      Baro_alt_publisher_ = nh_.advertise<std_msgs::Float32>("baro/alt",1);
+  }
+  if(sensors & SENSOR_SONAR)
+  {
+      sonar_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::sonarCallback, this);
+      Sonar_publisher_ = nh_.advertise<sensor_msgs::Range>("sonar/data", 1);
+  }
 
   // initialize RC variables
   center_sticks_.resize(8);
@@ -63,12 +84,10 @@ nazeROS::nazeROS() :
 
   //initialize constant message members
   Imu_.header.frame_id = imu_frame_id;
-  // accel noise is 400 ug's
-  // gyro noise is 0.05 deg/s
-  boost::array<double,9> lin_covariance = { {0.0004, 0.0, 0.0,
+  boost::array<double,9> lin_covariance = { {0.0004, 0.0, 0.0,    // accel noise is 400 ug's
                                              0.0, 0.0004, 0.0,
                                              0.0, 0.0, 0.0004} };
-  boost::array<double,9> ang_covariance = { {0.05*M_PI/180.0, 0.0, 0.0,
+  boost::array<double,9> ang_covariance = { {0.05*M_PI/180.0, 0.0, 0.0,    // gyro noise is 0.05 deg/s
                                              0.0, 0.05*M_PI/180.0, 0.0,
                                              0.0, 0.0, 0.05*M_PI/180.0} };
 
@@ -85,18 +104,21 @@ nazeROS::nazeROS() :
   getPID();
 
   // dynamic reconfigure
-  func_ = boost::bind(&nazeROS::gainCallback, this, _1, _2);
+  func_ = boost::bind(&fcuIO::gainCallback, this, _1, _2);
   server_.setCallback(func_);
 
   ROS_INFO("finished initialization");
 }
 
-nazeROS::~nazeROS(){
+
+fcuIO::~fcuIO(){
   delete MSP_;
 }
 
 
-void nazeROS::calibrationCallback(const std_msgs::BoolConstPtr &msg){
+
+void fcuIO::calibrationCallback(const std_msgs::BoolConstPtr &msg)
+{
   if(msg->data){
     if(calibrateRC()){
       ROS_INFO("RC Calibration Successful");
@@ -105,31 +127,15 @@ void nazeROS::calibrationCallback(const std_msgs::BoolConstPtr &msg){
 }
 
 
-void nazeROS::armCallback(const std_msgs::BoolConstPtr &msg){
-  armed_ = msg->data;
-}
-
-
-void nazeROS::RNCommandCallback(const relative_nav::CommandConstPtr &msg){
-  command_.roll = msg->roll;
-  command_.pitch = msg->pitch;
-  command_.yaw_rate = msg->yaw_rate;
-  command_.thrust = msg->thrust;
-  command_.angle_mode = true;
-//  naze_ros::Command* p = & command_;
-//  naze_ros::CommandConstPtr command(p);
-  //commandCallback(command);
-}
-
-
-void nazeROS::commandCallback(const naze_ros::CommandConstPtr &msg){
+void fcuIO::RPYCallback(const fcu_io::CommandConstPtr &msg)
+{
   int aux1(0.0), aux2(0.0), aux3(0.0), aux4(0.0);
   double command[4] = {0.0, 0.0, 0.0, 0.0};
   uint16_t PWM_range;
-  command[RC_AIL] = msg->roll/max_roll_;
-  command[RC_ELE] = msg->pitch/max_pitch_;
-  command[RC_THR] = msg->thrust/max_throttle_;
-  command[RC_RUD] = msg->yaw_rate/max_yaw_rate_;
+  command[RC_AIL] = msg->normalized_roll;
+  command[RC_ELE] = msg->normalized_pitch;
+  command[RC_THR] = msg->normalized_throttle;
+  command[RC_RUD] = msg->normalized_yaw;
 
   for(int i=0; i<8; i++){
     if(i == RC_AIL || i == RC_RUD){
@@ -150,32 +156,120 @@ void nazeROS::commandCallback(const naze_ros::CommandConstPtr &msg){
 }
 
 
-void nazeROS::imuCallback(const ros::TimerEvent& event){
+void fcuIO::imuCallback(const ros::TimerEvent& event)
+{
   if(!getImu()){
     ROS_ERROR_STREAM("IMU receive error");
   }
 }
 
-void nazeROS::gpsCallback(const ros::TimerEvent &event){
-  if(!getGPS()){
-    ROS_ERROR_STREAM("GPS receive error");
-  }
-}
 
-
-void nazeROS::rcCallback(const ros::TimerEvent& event){
+void fcuIO::rcCallback(const ros::TimerEvent& event)
+{
   if(!sendRC()){
     ROS_ERROR_STREAM("RC Send Error");
   }
 }
 
 
-bool nazeROS::calibrateIMU(){
+bool fcuIO::calibrateIMU(){
   return MSP_->calibrateIMU();
 }
 
 
-bool nazeROS::calibrateRC(){
+void fcuIO::asCallback(const ros::TimerEvent& event)
+{
+  Airspeed receivedASdata;
+  memset(&receivedASdata, 0, sizeof(receivedASdata));
+  bool received = MSP_->getRawAirspeed(receivedASdata);
+  static int calibration_counter = 0;
+  const int calibration_count = 100;
+  static float _diff_pres_offset = 0;
+
+  if(received){
+      if(receivedASdata.airspeed != 0)
+      {
+          // conversion from pixhawk source code
+          float temperature = ((200.0f * receivedASdata.temp) / 2047) - 50;
+          const float P_min = -1.0f;
+          const float P_max = 1.0f;
+          const float PSI_to_Pa = 6894.757f;
+          /*
+            this equation is an inversion of the equation in the
+            pressure transfer function figure on page 4 of the datasheet
+
+            We negate the result so that positive differential pressures
+            are generated when the bottom port is used as the static
+            port on the pitot and top port is used as the dynamic port
+           */
+          float diff_press_PSI = -((receivedASdata.airspeed - 0.1f*16383) * (P_max-P_min)/(0.8f*16383) + P_min);
+          float diff_press_pa_raw = diff_press_PSI * PSI_to_Pa;
+          if(calibration_counter > calibration_count)
+          {
+              diff_press_pa_raw -= _diff_pres_offset;
+              sensor_msgs::FluidPressure pressure_msg;
+              pressure_msg.fluid_pressure = diff_press_pa_raw;
+              Airspeed_publisher_.publish(pressure_msg);
+              //ROS_INFO_STREAM("AIRSPEED = " << sqrt(2/1.15*diff_press_pa_raw) << " pressure " << diff_press_pa_raw);
+          }
+          else if(calibration_counter == calibration_count)
+          {
+              _diff_pres_offset = _diff_pres_offset/calibration_count;
+              calibration_counter++;
+          }
+          else
+          {
+              _diff_pres_offset += diff_press_pa_raw;
+              calibration_counter++;
+          }
+      }
+  } else{
+        ROS_ERROR_STREAM("Airspeed receive error");
+  }
+}
+
+
+void fcuIO::altCallback(const ros::TimerEvent& event)
+{
+  Altitude receivedAltdata;
+  memset(&receivedAltdata, 0, sizeof(receivedAltdata));
+  bool received = MSP_->getAltitude(receivedAltdata);
+
+  if(received){
+      std_msgs::Float32 alt;
+      alt.data = receivedAltdata.estAlt/100.0;
+      Baro_alt_publisher_.publish(alt);
+//      ROS_INFO_STREAM("ALT = " << receivedAltdata.estAlt << " VARIO = " << receivedAltdata.vario);
+  } else{
+        ROS_ERROR_STREAM("ALT receive error");
+  }
+}
+
+
+void fcuIO::sonarCallback(const ros::TimerEvent& event)
+{
+  Sonar receivedSdata;
+  memset(&receivedSdata, 0, sizeof(receivedSdata));
+  bool received = MSP_->getSonar(receivedSdata);
+
+  if(received && receivedSdata.distance > 2 && receivedSdata.distance < 400){
+      sensor_msgs::Range dist;
+      //dist.header.stamp.now();
+      dist.min_range = 0.02;
+      dist.max_range = 4;
+      dist.radiation_type = dist.ULTRASOUND;
+      dist.field_of_view = 15*M_PI/180.0;
+      dist.range = receivedSdata.distance/100.0;
+      Sonar_publisher_.publish(dist);
+//      ROS_INFO_STREAM("SONAR = " << receivedSdata.distance);
+  } else{
+        ROS_ERROR_STREAM("Sonar receive error");
+  }
+}
+
+
+bool fcuIO::calibrateRC()
+{
   bool success;
   RC read_rc_commands;
   double sum[4] = {0.0, 0.0,0.0,0.0};
@@ -225,7 +319,9 @@ bool nazeROS::calibrateRC(){
   return true;
 }
 
-bool nazeROS::sendRC(){
+
+bool fcuIO::sendRC()
+{
   SetRawRC outgoing_rc_commands;
   for(int i=0; i<8; i++){
     outgoing_rc_commands.rcData[i] = rc_commands_[i];
@@ -234,7 +330,9 @@ bool nazeROS::sendRC(){
   //return getRC();
 }
 
-bool nazeROS::setPID(PIDitem roll, PIDitem pitch, PIDitem yaw){
+
+bool fcuIO::setPID(PIDitem roll, PIDitem pitch, PIDitem yaw)
+{
   SetPID outgoing_PID_command;
   for(int i = 0; i<10; i++){
     if(i == ROLL){
@@ -259,7 +357,9 @@ bool nazeROS::setPID(PIDitem roll, PIDitem pitch, PIDitem yaw){
   return getPID();
 }
 
-bool nazeROS::getRC(){
+
+bool fcuIO::getRC()
+{
   RC actual_rc_commands;
   bool success = MSP_->getRC(actual_rc_commands);
   ROS_INFO_STREAM("RC Commands:");
@@ -269,63 +369,39 @@ bool nazeROS::getRC(){
   return true;
 }
 
-bool nazeROS::getStatus(){
+
+bool fcuIO::getStatus(uint16_t &sensors, int &cycle_time, int& i2c_errors){
   Status receivedStatus;
   memset(&receivedStatus, 0, sizeof(receivedStatus));
   bool received = MSP_->getStatus(receivedStatus);
   if(received){
-    int cycle_time = (int)receivedStatus.cycle_time;
-    int i2c_errors = (int)receivedStatus.i2c_errors_count;
-    ROS_INFO_STREAM("cycle time = " << cycle_time << "us, i2c_errors = " << i2c_errors);
+    cycle_time = (int)receivedStatus.cycle_time;
+    i2c_errors = (int)receivedStatus.i2c_errors_count;
+    sensors = receivedStatus.sensor;
     return true;
   }else{
     return false;
   }
 }
 
-void nazeROS::getAttitude(geometry_msgs::Quaternion & orientation){
-//  ROS_INFO("getting attitude");
+
+void fcuIO::getAttitude(geometry_msgs::Quaternion & orientation){
   Attitude receivedAttitude;
   memset(&receivedAttitude, 0, sizeof(receivedAttitude));
   bool received = MSP_->getAttitude(receivedAttitude);
   if(received){
     double roll = (double)receivedAttitude.angx/10.0*M_PI/180.0;
-    double pitch = -1.0*(double)receivedAttitude.angy/10.0*M_PI/180.0;
+    double pitch = -1.0*(double)receivedAttitude.angy/10.0*M_PI/180.0; // pitch is reversed on naze
     double yaw = (double)(receivedAttitude.heading -180.0)*M_PI/180.0;
-    ROS_INFO_STREAM("roll: " << roll*180.0/M_PI << " pitch: " << pitch*180.0/M_PI << " yaw: " << yaw*180.0/M_PI);
     tf::Quaternion tf_orientation;
     tf_orientation.setRPY(yaw, pitch, roll);
-
-    double test_y, test_p, test_r;
-    tf::Matrix3x3(tf_orientation).getRPY(test_y, test_p, test_r);
-    ROS_INFO_STREAM("roll: " << test_r*180.0/M_PI << " pitch: " << test_p*180.0/M_PI << " yaw: " << test_y*180.0/M_PI);
-
     tf::quaternionTFToMsg(tf_orientation, orientation);
   }
-//  ROS_INFO("done getting attitude");
-}
-
-bool nazeROS::getGPS(){
-  naze_ros::GPS GPS_msg;
-  RawGPS receivedGPS;
-  memset(&receivedGPS, 0, sizeof(receivedGPS));
-  bool received = MSP_->getGPS(receivedGPS);
-  if(received){
-    GPS_msg.fix = (bool)receivedGPS.GPS_FIX;
-    GPS_msg.NumSat = (int)receivedGPS.GPS_NumSat;
-    GPS_msg.latitude = (double)receivedGPS.GPS_lat/10000000.0;
-    GPS_msg.longitude = (double)receivedGPS.GPS_lon/10000000.0;
-    GPS_msg.altitude = (double)receivedGPS.GPS_altitude;
-    GPS_msg.speed = (double)receivedGPS.GPS_speed/100.0;
-    GPS_publisher_.publish(GPS_msg);
-    return true;
-  }else{
-    return false;
-  }
 }
 
 
-bool nazeROS::getImu(){
+bool fcuIO::getImu()
+{
   RawIMU receivedIMUdata;
   memset(&receivedIMUdata, 0, sizeof(receivedIMUdata));
   bool received = MSP_->getRawIMU(receivedIMUdata);
@@ -341,13 +417,40 @@ bool nazeROS::getImu(){
     }
     Imu_.header.stamp = ros::Time::now();
     Imu_publisher_.publish(Imu_);
+
+    sensor_msgs::MagneticField mag;
+    mag.magnetic_field.x = receivedIMUdata.magx;
+    mag.magnetic_field.y = receivedIMUdata.magy;
+    mag.magnetic_field.z = receivedIMUdata.magz;
+    if(have_mag_)
+        Mag_publisher_.publish(mag);
+    //ROS_INFO_STREAM(receivedIMUdata.magx << " " << receivedIMUdata.magy << " " << receivedIMUdata.magz);
+
     return true;
   } else{
     return false;
   }
 }
 
-bool nazeROS::getPID(){
+
+bool fcuIO::getAS()
+{
+  Airspeed receivedASdata;
+  memset(&receivedASdata, 0, sizeof(receivedASdata));
+  bool received = MSP_->getRawAirspeed(receivedASdata);
+
+  if(received){
+    //if(receivedASdata.airspeed != 0)
+        ROS_INFO_STREAM("AIRSPEED = " << receivedASdata.airspeed << " TEMP = " << receivedASdata.temp);
+    return true;
+  } else{
+        ROS_INFO_STREAM("nothing");
+    return false;
+  }
+}
+
+
+bool fcuIO::getPID(){
   PID receivedPIDmsg;
   memset(&receivedPIDmsg, 0, sizeof(receivedPIDmsg));
   bool received = MSP_->getPID(receivedPIDmsg);
@@ -366,7 +469,9 @@ bool nazeROS::getPID(){
   }
 }
 
-bool nazeROS::loadRCFromParam(){
+
+bool fcuIO::loadRCFromParam()
+{
   int max_ail, max_ele, max_rud, max_thr;
   int min_ail, min_ele, min_rud, min_thr;
   int mid_ail, mid_ele, mid_rud, mid_thr;
@@ -408,7 +513,9 @@ bool nazeROS::loadRCFromParam(){
   return true;
 }
 
-void nazeROS::gainCallback(naze_ros::GainConfig &config, uint32_t level){
+
+void fcuIO::gainCallback(fcu_io::GainConfig &config, uint32_t level)
+{
   PIDitem new_roll, new_pitch, new_yaw;
   new_roll.P = config.rollP;
   new_roll.I = config.rollI;
@@ -425,7 +532,7 @@ void nazeROS::gainCallback(naze_ros::GainConfig &config, uint32_t level){
 }
 
 
-int nazeROS::sat(int input, int min, int max){
+int fcuIO::sat(int input, int min, int max){
   int output(input);
   if(input > max){
     output = max;
@@ -437,4 +544,4 @@ int nazeROS::sat(int input, int min, int max){
 
 
 
-} // namespace naze_ros
+} // namespace fcu_io
