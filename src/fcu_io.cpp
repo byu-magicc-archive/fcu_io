@@ -386,25 +386,17 @@ bool fcuIO::getStatus(uint16_t &sensors, int &cycle_time, int& i2c_errors){
 
 
 void fcuIO::getAttitude(geometry_msgs::Quaternion & orientation){
-//  ROS_INFO("getting attitude");
   Attitude receivedAttitude;
   memset(&receivedAttitude, 0, sizeof(receivedAttitude));
   bool received = MSP_->getAttitude(receivedAttitude);
   if(received){
     double roll = (double)receivedAttitude.angx/10.0*M_PI/180.0;
-    double pitch = -1.0*(double)receivedAttitude.angy/10.0*M_PI/180.0;
+    double pitch = -1.0*(double)receivedAttitude.angy/10.0*M_PI/180.0; // pitch is reversed on naze
     double yaw = (double)(receivedAttitude.heading -180.0)*M_PI/180.0;
-    ROS_INFO_STREAM("roll: " << roll*180.0/M_PI << " pitch: " << pitch*180.0/M_PI << " yaw: " << yaw*180.0/M_PI);
     tf::Quaternion tf_orientation;
     tf_orientation.setRPY(yaw, pitch, roll);
-
-    double test_y, test_p, test_r;
-    tf::Matrix3x3(tf_orientation).getRPY(test_y, test_p, test_r);
-    ROS_INFO_STREAM("roll: " << test_r*180.0/M_PI << " pitch: " << test_p*180.0/M_PI << " yaw: " << test_y*180.0/M_PI);
-
     tf::quaternionTFToMsg(tf_orientation, orientation);
   }
-//  ROS_INFO("done getting attitude");
 }
 
 
