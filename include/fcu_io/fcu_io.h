@@ -100,6 +100,7 @@ private:
   std::vector<PIDitem> PIDs_;
   bool armed_;
   bool acro_;
+  bool have_mag_;
 
   // Functions
   bool getImu();

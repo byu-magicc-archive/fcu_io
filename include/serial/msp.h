@@ -15,6 +15,7 @@ class MSP
 public:
   MSP(std::string port, uint32_t baud, serial::Timeout timeout);
 
+  bool getStatus(Status& message);
   bool getRawIMU(RawIMU& message);
   bool calibrateIMU();
   bool getAttitude(Attitude& message);
@@ -31,6 +32,7 @@ private:
   serial::Serial Serial_;
 
   // template-specific functions - these can be expanded for additional messages
+  bool receive(Status& message);
   bool receive(RawIMU& message);
   bool send(SetRawRC& command);
   bool receive(RC& message);

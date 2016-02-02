@@ -1,5 +1,15 @@
 #include "fcu_io/fcu_io.h"
 
+typedef enum {
+//    SENSOR_GYRO = 1 << 0, // always present
+    SENSOR_ACC = 1 << 0, // almost always present
+    SENSOR_BARO = 1 << 1,
+    SENSOR_MAG = 1 << 2,
+    SENSOR_GPS = 1 << 3,
+    SENSOR_SONAR = 1 << 4,
+    SENSOR_AIRSPEED = 1 << 5,
+} sensors_e;
+
 namespace fcu_io
 {
 
@@ -31,22 +41,46 @@ fcuIO::fcuIO() :
   timeout.write_timeout_constant = 2;
   MSP_ = new MSP(serial_port, (u_int32_t)baudrate, timeout);
 
-  // Set up Callbacks
+  bool received = false;
+  have_mag_ = false;
+  Status receivedStatus;
+  while (received == false)
+  {
+      memset(&receivedStatus, 0, sizeof(receivedStatus));
+      received = MSP_->getStatus(receivedStatus);
+  }
+  uint16_t sensors = receivedStatus.sensor;
+
+  // Set up Callbacks and publishers if sensors are present
   Command_subscriber_ = nh_.subscribe("command", 1, &fcuIO::RPYCallback, this);
   RC_calibration_subscriber_ = nh_.subscribe("calibrate", 1, &fcuIO::calibrationCallback, this);
 //  arm_subscriber_ = nh_.subscribe("arm", 1, &fcuIO::armCallback, this);
-  imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0/imu_pub_rate), &fcuIO::imuCallback, this);
   rc_send_timer_ = nh_.createTimer(ros::Duration(1.0/rc_send_rate), &fcuIO::rcCallback, this);
-  as_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::asCallback, this);
-  alt_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::altCallback, this);
-  sonar_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::sonarCallback, this);
-
-  // setup publishers
-  Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
-  Mag_publisher_ = nh_.advertise<sensor_msgs::MagneticField>("mag/data", 1);
-  Baro_alt_publisher_ = nh_.advertise<std_msgs::Float32>("baro/alt",1);
-  Airspeed_publisher_ = nh_.advertise<sensor_msgs::FluidPressure>("airspeed/data", 1);
-  Sonar_publisher_ = nh_.advertise<sensor_msgs::Range>("sonar/data", 1);
+  if(sensors & SENSOR_ACC)
+  {
+      imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0/imu_pub_rate), &fcuIO::imuCallback, this);
+      Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
+  }
+  if(sensors & SENSOR_MAG)
+  {
+      have_mag_ = true;
+      Mag_publisher_ = nh_.advertise<sensor_msgs::MagneticField>("mag/data", 1);
+  }
+  if(sensors & SENSOR_AIRSPEED)
+  {
+      as_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::asCallback, this);
+      Airspeed_publisher_ = nh_.advertise<sensor_msgs::FluidPressure>("airspeed/data", 1);
+  }
+  if(sensors & SENSOR_BARO)
+  {
+      alt_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::altCallback, this);
+      Baro_alt_publisher_ = nh_.advertise<std_msgs::Float32>("baro/alt",1);
+  }
+  if(sensors & SENSOR_SONAR)
+  {
+      sonar_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::sonarCallback, this);
+      Sonar_publisher_ = nh_.advertise<sensor_msgs::Range>("sonar/data", 1);
+  }
 
   // initialize RC variables
   center_sticks_.resize(8);
@@ -360,7 +394,8 @@ bool fcuIO::getImu()
     mag.magnetic_field.x = receivedIMUdata.magx;
     mag.magnetic_field.y = receivedIMUdata.magy;
     mag.magnetic_field.z = receivedIMUdata.magz;
-    Mag_publisher_.publish(mag);
+    if(have_mag_)
+        Mag_publisher_.publish(mag);
     //ROS_INFO_STREAM(receivedIMUdata.magx << " " << receivedIMUdata.magy << " " << receivedIMUdata.magz);
 
     return true;
