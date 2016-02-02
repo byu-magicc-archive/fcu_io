@@ -25,7 +25,7 @@ generate_messages(
 )
 
 generate_dynamic_reconfigure_options(
-  cfg/gains.cfg
+  cfg/Gain.cfg
 )
 
 catkin_package(

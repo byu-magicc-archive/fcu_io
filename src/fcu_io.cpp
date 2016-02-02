@@ -47,26 +47,47 @@ fcuIO::fcuIO() :
 
   if(sensors & SENSOR_ACC)
   {
+      ROS_INFO("found IMU");  
+      ROS_INFO("calibrating IMU");
+      if(calibrateIMU()){
+        ROS_INFO("IMU calibration successful");
+      }else{
+        ROS_ASSERT("IMU calibration unsuccessful");
+      }
       imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0/imu_pub_rate), &fcuIO::imuCallback, this);
       Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
+      //initialize constant message members
+      Imu_.header.frame_id = imu_frame_id;
+      boost::array<double,9> lin_covariance = { {0.0004, 0.0, 0.0,    // accel noise is 400 ug's
+                                                 0.0, 0.0004, 0.0,
+                                                 0.0, 0.0, 0.0004} };
+      boost::array<double,9> ang_covariance = { {0.05*M_PI/180.0, 0.0, 0.0,    // gyro noise is 0.05 deg/s
+                                                 0.0, 0.05*M_PI/180.0, 0.0,
+                                                 0.0, 0.0, 0.05*M_PI/180.0} };
+      Imu_.angular_velocity_covariance = ang_covariance;
+      Imu_.linear_acceleration_covariance = lin_covariance;
   }
   if(sensors & SENSOR_MAG)
   {
+      ROS_INFO("Found Magnetometer");
       have_mag_ = true;
       Mag_publisher_ = nh_.advertise<sensor_msgs::MagneticField>("mag/data", 1);
   }
   if(sensors & SENSOR_AIRSPEED)
   {
+      ROS_INFO("Found Airspeed");
       as_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::asCallback, this);
       Airspeed_publisher_ = nh_.advertise<sensor_msgs::FluidPressure>("airspeed/data", 1);
   }
   if(sensors & SENSOR_BARO)
   {
+      ROS_INFO("Found Altimeter");
       alt_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::altCallback, this);
       Baro_alt_publisher_ = nh_.advertise<std_msgs::Float32>("baro/alt",1);
   }
   if(sensors & SENSOR_SONAR)
   {
+      ROS_INFO("Found Sonar");
       sonar_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::sonarCallback, this);
       Sonar_publisher_ = nh_.advertise<sensor_msgs::Range>("sonar/data", 1);
   }
@@ -79,31 +100,10 @@ fcuIO::fcuIO() :
   PIDs_.resize(10);
   ROS_WARN("RC Calibration Settings");
   loadRCFromParam();
-  armed_ = false;
   acro_ = false;
 
-  //initialize constant message members
-  Imu_.header.frame_id = imu_frame_id;
-  boost::array<double,9> lin_covariance = { {0.0004, 0.0, 0.0,    // accel noise is 400 ug's
-                                             0.0, 0.0004, 0.0,
-                                             0.0, 0.0, 0.0004} };
-  boost::array<double,9> ang_covariance = { {0.05*M_PI/180.0, 0.0, 0.0,    // gyro noise is 0.05 deg/s
-                                             0.0, 0.05*M_PI/180.0, 0.0,
-                                             0.0, 0.0, 0.05*M_PI/180.0} };
-
-  Imu_.angular_velocity_covariance = ang_covariance;
-  Imu_.linear_acceleration_covariance = lin_covariance;
-
-
-  ROS_INFO("calibrating IMU");
-  if(calibrateIMU()){
-    ROS_INFO("IMU calibration successful");
-  }else{
-    ROS_ERROR("IMU calibration unsuccessful");
-  }
-  getPID();
-
   // dynamic reconfigure
+  getPID(); // Load current PID settings
   func_ = boost::bind(&fcuIO::gainCallback, this, _1, _2);
   server_.setCallback(func_);
 
@@ -289,7 +289,6 @@ bool fcuIO::calibrateRC()
   ROS_WARN("Saving Centered Data");
   for(int i=0; i<4; i++){
     center_sticks_[i] = (uint16_t)round(sum[i]/200.0);
-    ROS_INFO_STREAM("Channel " << i << " trim = " << center_sticks_[i]);
   }
 
   ROS_WARN("Calibrating maximum and minimum of RC channels");
@@ -314,7 +313,7 @@ bool fcuIO::calibrateRC()
   for(int i=0; i<4; i++){
     max_sticks_[i] = max_PWM_received[i];
     min_sticks_[i] = min_PWM_received[i];
-    ROS_INFO_STREAM("channel " << i << ": max = " << max_sticks_[i] << " min = " << min_sticks_[i]);
+    ROS_INFO_STREAM("channel " << i << ": max = " << max_sticks_[i] << " center = " << center_sticks_[i] << " min = " << min_sticks_[i]);
   }
   return true;
 }
