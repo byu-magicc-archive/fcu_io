@@ -34,15 +34,19 @@ fcuIO::fcuIO() :
   // Set up Callbacks
   Command_subscriber_ = nh_.subscribe("command", 1, &fcuIO::RPYCallback, this);
   RC_calibration_subscriber_ = nh_.subscribe("calibrate", 1, &fcuIO::calibrationCallback, this);
-  arm_subscriber_ = nh_.subscribe("arm", 1, &fcuIO::armCallback, this);
+//  arm_subscriber_ = nh_.subscribe("arm", 1, &fcuIO::armCallback, this);
   imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0/imu_pub_rate), &fcuIO::imuCallback, this);
   rc_send_timer_ = nh_.createTimer(ros::Duration(1.0/rc_send_rate), &fcuIO::rcCallback, this);
-//  as_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::asCallback, this);
-//  alt_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::altCallback, this);
-//  sonar_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::sonarCallback, this);
+  as_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::asCallback, this);
+  alt_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::altCallback, this);
+  sonar_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::sonarCallback, this);
 
   // setup publishers
   Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
+  Mag_publisher_ = nh_.advertise<sensor_msgs::MagneticField>("mag/data", 1);
+  Baro_alt_publisher_ = nh_.advertise<std_msgs::Float32>("baro/alt",1);
+  Airspeed_publisher_ = nh_.advertise<sensor_msgs::FluidPressure>("airspeed/data", 1);
+  Sonar_publisher_ = nh_.advertise<sensor_msgs::Range>("sonar/data", 1);
 
   // initialize RC variables
   center_sticks_.resize(8);
@@ -147,12 +151,49 @@ void fcuIO::asCallback(const ros::TimerEvent& event)
   Airspeed receivedASdata;
   memset(&receivedASdata, 0, sizeof(receivedASdata));
   bool received = MSP_->getRawAirspeed(receivedASdata);
+  static int calibration_counter = 0;
+  const int calibration_count = 100;
+  static float _diff_pres_offset = 0;
 
   if(received){
-    //if(receivedASdata.airspeed != 0)
-        ROS_INFO_STREAM("AIRSPEED = " << receivedASdata.airspeed << " TEMP = " << receivedASdata.temp);
+      if(receivedASdata.airspeed != 0)
+      {
+          // conversion from pixhawk source code
+          float temperature = ((200.0f * receivedASdata.temp) / 2047) - 50;
+          const float P_min = -1.0f;
+          const float P_max = 1.0f;
+          const float PSI_to_Pa = 6894.757f;
+          /*
+            this equation is an inversion of the equation in the
+            pressure transfer function figure on page 4 of the datasheet
+
+            We negate the result so that positive differential pressures
+            are generated when the bottom port is used as the static
+            port on the pitot and top port is used as the dynamic port
+           */
+          float diff_press_PSI = -((receivedASdata.airspeed - 0.1f*16383) * (P_max-P_min)/(0.8f*16383) + P_min);
+          float diff_press_pa_raw = diff_press_PSI * PSI_to_Pa;
+          if(calibration_counter > calibration_count)
+          {
+              diff_press_pa_raw -= _diff_pres_offset;
+              sensor_msgs::FluidPressure pressure_msg;
+              pressure_msg.fluid_pressure = diff_press_pa_raw;
+              Airspeed_publisher_.publish(pressure_msg);
+              //ROS_INFO_STREAM("AIRSPEED = " << sqrt(2/1.15*diff_press_pa_raw) << " pressure " << diff_press_pa_raw);
+          }
+          else if(calibration_counter == calibration_count)
+          {
+              _diff_pres_offset = _diff_pres_offset/calibration_count;
+              calibration_counter++;
+          }
+          else
+          {
+              _diff_pres_offset += diff_press_pa_raw;
+              calibration_counter++;
+          }
+      }
   } else{
-        ROS_INFO_STREAM("Airspeed receive error");
+        ROS_ERROR_STREAM("Airspeed receive error");
   }
 }
 
@@ -163,9 +204,12 @@ void fcuIO::altCallback(const ros::TimerEvent& event)
   bool received = MSP_->getAltitude(receivedAltdata);
 
   if(received){
-        ROS_INFO_STREAM("ALT = " << receivedAltdata.estAlt << " VARIO = " << receivedAltdata.vario);
+      std_msgs::Float32 alt;
+      alt.data = receivedAltdata.estAlt/100.0;
+      Baro_alt_publisher_.publish(alt);
+//      ROS_INFO_STREAM("ALT = " << receivedAltdata.estAlt << " VARIO = " << receivedAltdata.vario);
   } else{
-        ROS_INFO_STREAM("ALT receive error");
+        ROS_ERROR_STREAM("ALT receive error");
   }
 }
 
@@ -175,11 +219,18 @@ void fcuIO::sonarCallback(const ros::TimerEvent& event)
   memset(&receivedSdata, 0, sizeof(receivedSdata));
   bool received = MSP_->getSonar(receivedSdata);
 
-  if(received){
-    //if(receivedASdata.airspeed != 0)
-        ROS_INFO_STREAM("SONAR = " << receivedSdata.distance);
+  if(received && receivedSdata.distance > 2 && receivedSdata.distance < 400){
+      sensor_msgs::Range dist;
+      //dist.header.stamp.now();
+      dist.min_range = 0.02;
+      dist.max_range = 4;
+      dist.radiation_type = dist.ULTRASOUND;
+      dist.field_of_view = 15*M_PI/180.0;
+      dist.range = receivedSdata.distance/100.0;
+      Sonar_publisher_.publish(dist);
+//      ROS_INFO_STREAM("SONAR = " << receivedSdata.distance);
   } else{
-        ROS_INFO_STREAM("Sonar receive error");
+        ROS_ERROR_STREAM("Sonar receive error");
   }
 }
 
@@ -247,7 +298,7 @@ bool fcuIO::sendRC()
     outgoing_rc_commands.rcData[i] = rc_commands_[i];
   }
   MSP_->setRawRC(outgoing_rc_commands);
-  return getRC();
+  //return getRC();
 }
 
 bool fcuIO::setPID(PIDitem roll, PIDitem pitch, PIDitem yaw)
@@ -302,9 +353,16 @@ bool fcuIO::getImu()
     Imu_.angular_velocity.x = (double)receivedIMUdata.gyrx*0.001065264; // 2^15 = 2000 deg/s
     Imu_.angular_velocity.y = -1.0*(double)receivedIMUdata.gyry*0.001065264;
     Imu_.angular_velocity.z = -1.0*(double)receivedIMUdata.gyrz*0.001065264;
-    ROS_INFO_STREAM(receivedIMUdata.magx << " " << receivedIMUdata.magy << " " << receivedIMUdata.magz);
     Imu_.header.stamp = ros::Time::now();
     Imu_publisher_.publish(Imu_);
+
+    sensor_msgs::MagneticField mag;
+    mag.magnetic_field.x = receivedIMUdata.magx;
+    mag.magnetic_field.y = receivedIMUdata.magy;
+    mag.magnetic_field.z = receivedIMUdata.magz;
+    Mag_publisher_.publish(mag);
+    //ROS_INFO_STREAM(receivedIMUdata.magx << " " << receivedIMUdata.magy << " " << receivedIMUdata.magz);
+
     return true;
   } else{
     return false;

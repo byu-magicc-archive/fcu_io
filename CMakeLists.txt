@@ -3,6 +3,7 @@ project(fcu_io)
 
 find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
+  std_msgs
   roscpp
   rospy
   std_msgs
@@ -22,7 +23,7 @@ add_message_files(
 
 generate_messages(
    DEPENDENCIES
-#   std_msgs
+   std_msgs
 )
 
 catkin_package(

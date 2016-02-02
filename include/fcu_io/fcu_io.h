@@ -6,6 +6,10 @@
 #include <fcu_io/GainConfig.h>
 #include <dynamic_reconfigure/server.h>
 #include <sensor_msgs/Imu.h>
+#include <sensor_msgs/MagneticField.h>
+#include <sensor_msgs/Range.h>
+#include <sensor_msgs/FluidPressure.h>
+#include <std_msgs/Float32.h>
 #include <std_msgs/Bool.h>
 
 #include "serial/msp.h"
@@ -63,6 +67,10 @@ private:
   ros::Subscriber RC_calibration_subscriber_;
   ros::Subscriber arm_subscriber_;
   ros::Publisher Imu_publisher_;
+  ros::Publisher Mag_publisher_;
+  ros::Publisher Sonar_publisher_;
+  ros::Publisher Baro_alt_publisher_;
+  ros::Publisher Airspeed_publisher_;
   ros::Timer imu_pub_timer_;
   ros::Timer rc_send_timer_;
   ros::Timer as_pub_timer_;
