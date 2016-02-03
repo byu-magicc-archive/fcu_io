@@ -5,7 +5,8 @@ namespace fcu_io
 
 fcuIO::fcuIO() :
   nh_(ros::NodeHandle()),
-  nh_private_(ros::NodeHandle("~"))
+  nh_private_(ros::NodeHandle("~")),
+  have_mag_(false)
 {
   // retrieve params
   double imu_pub_rate, rc_send_rate, dtimeout;
@@ -25,8 +26,7 @@ fcuIO::fcuIO() :
   nh_private_.param<int>("baudrate", baudrate, 115200);
   nh_private_.param<double>("timeout", dtimeout, 2);
   nh_private_.param<bool>("get_imu_attitude", get_imu_attitude_, true);
-  nh_private_.param<bool>("enable_GPS", enable_GPS, true);
-  nh_private_.param<bool>("use_relative_nav_callback", useRNcallback, true);
+  nh_private_.param<bool>("echo_rc_data", echo_rc_data_, false);
 
   // connect serial port
   serial::Timeout timeout = serial::Timeout::simpleTimeout(dtimeout);
@@ -47,49 +47,47 @@ fcuIO::fcuIO() :
 
   if(sensors & SENSOR_ACC)
   {
-      ROS_INFO("found IMU");  
-      ROS_INFO("calibrating IMU");
-      if(calibrateIMU()){
-        ROS_INFO("IMU calibration successful");
-      }else{
-        ROS_ASSERT("IMU calibration unsuccessful");
-      }
-      imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0/imu_pub_rate), &fcuIO::imuCallback, this);
-      Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
-      //initialize constant message members
-      Imu_.header.frame_id = imu_frame_id;
-      boost::array<double,9> lin_covariance = { {0.0004, 0.0, 0.0,    // accel noise is 400 ug's
-                                                 0.0, 0.0004, 0.0,
-                                                 0.0, 0.0, 0.0004} };
-      boost::array<double,9> ang_covariance = { {0.05*M_PI/180.0, 0.0, 0.0,    // gyro noise is 0.05 deg/s
-                                                 0.0, 0.05*M_PI/180.0, 0.0,
-                                                 0.0, 0.0, 0.05*M_PI/180.0} };
-      Imu_.angular_velocity_covariance = ang_covariance;
-      Imu_.linear_acceleration_covariance = lin_covariance;
+    ROS_INFO("found IMU - Calibrating");
+    ROS_ASSERT(calibrateIMU());
+    ROS_INFO("IMU calibration successful");
+
+    //initialize constant message members
+    Imu_.header.frame_id = imu_frame_id;
+    boost::array<double,9> lin_covariance = { {0.0004, 0.0, 0.0,    // accel noise is 400 ug's
+                                               0.0, 0.0004, 0.0,
+                                               0.0, 0.0, 0.0004} };
+    boost::array<double,9> ang_covariance = { {0.05*M_PI/180.0, 0.0, 0.0,    // gyro noise is 0.05 deg/s
+                                               0.0, 0.05*M_PI/180.0, 0.0,
+                                               0.0, 0.0, 0.05*M_PI/180.0} };
+    Imu_.angular_velocity_covariance = ang_covariance;
+    Imu_.linear_acceleration_covariance = lin_covariance;
+
+    imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0/imu_pub_rate), &fcuIO::imuCallback, this);
+    Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
   }
   if(sensors & SENSOR_MAG)
   {
-      ROS_INFO("Found Magnetometer");
-      have_mag_ = true;
-      Mag_publisher_ = nh_.advertise<sensor_msgs::MagneticField>("mag/data", 1);
+    ROS_INFO("Found Magnetometer");
+    have_mag_ = true;
+    Mag_publisher_ = nh_.advertise<sensor_msgs::MagneticField>("mag/data", 1);
   }
   if(sensors & SENSOR_AIRSPEED)
   {
-      ROS_INFO("Found Airspeed");
-      as_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::asCallback, this);
-      Airspeed_publisher_ = nh_.advertise<sensor_msgs::FluidPressure>("airspeed/data", 1);
+    ROS_INFO("Found Airspeed");
+    as_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::asCallback, this);
+    Airspeed_publisher_ = nh_.advertise<sensor_msgs::FluidPressure>("airspeed/data", 1);
   }
   if(sensors & SENSOR_BARO)
   {
-      ROS_INFO("Found Altimeter");
-      alt_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::altCallback, this);
-      Baro_alt_publisher_ = nh_.advertise<std_msgs::Float32>("baro/alt",1);
+    ROS_INFO("Found Altimeter");
+    alt_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::altCallback, this);
+    Baro_alt_publisher_ = nh_.advertise<std_msgs::Float32>("baro/alt",1);
   }
   if(sensors & SENSOR_SONAR)
   {
-      ROS_INFO("Found Sonar");
-      sonar_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::sonarCallback, this);
-      Sonar_publisher_ = nh_.advertise<sensor_msgs::Range>("sonar/data", 1);
+    ROS_INFO("Found Sonar");
+    sonar_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::sonarCallback, this);
+    Sonar_publisher_ = nh_.advertise<sensor_msgs::Range>("sonar/data", 1);
   }
 
   // initialize RC variables
@@ -147,8 +145,6 @@ void fcuIO::RPYCallback(const fcu_io::CommandConstPtr &msg)
     }else if(i == RC_THR){
       PWM_range = max_sticks_[i] - min_sticks_[i];
       rc_commands_[i] = (uint16_t)sat((int)round(command[i]*PWM_range+min_sticks_[i]),min_sticks_[i], max_sticks_[i]);
-    }else if(i == RC_ARM){
-      rc_commands_[RC_ARM] = armed_?max_PWM_output_:min_PWM_output_;
     }else if(i == RC_ACRO){
       rc_commands_[RC_ACRO] = acro_?max_PWM_output_:min_PWM_output_;
     }
@@ -187,44 +183,43 @@ void fcuIO::asCallback(const ros::TimerEvent& event)
   static float _diff_pres_offset = 0;
 
   if(received){
-      if(receivedASdata.airspeed != 0)
+    if(receivedASdata.airspeed != 0)
+    {
+      // conversion from pixhawk source code
+      float temperature = ((200.0f * receivedASdata.temp) / 2047) - 50;
+      const float P_min = -1.0f;
+      const float P_max = 1.0f;
+      const float PSI_to_Pa = 6894.757f;
+      /*
+       * this equation is an inversion of the equation in the
+       * pressure transfer function figure on page 4 of the datasheet
+       * We negate the result so that positive differential pressures
+       * are generated when the bottom port is used as the static
+       * port on the pitot and top port is used as the dynamic port
+       */
+      float diff_press_PSI = -((receivedASdata.airspeed - 0.1f*16383) * (P_max-P_min)/(0.8f*16383) + P_min);
+      float diff_press_pa_raw = diff_press_PSI * PSI_to_Pa;
+      if(calibration_counter > calibration_count)
       {
-          // conversion from pixhawk source code
-          float temperature = ((200.0f * receivedASdata.temp) / 2047) - 50;
-          const float P_min = -1.0f;
-          const float P_max = 1.0f;
-          const float PSI_to_Pa = 6894.757f;
-          /*
-            this equation is an inversion of the equation in the
-            pressure transfer function figure on page 4 of the datasheet
-
-            We negate the result so that positive differential pressures
-            are generated when the bottom port is used as the static
-            port on the pitot and top port is used as the dynamic port
-           */
-          float diff_press_PSI = -((receivedASdata.airspeed - 0.1f*16383) * (P_max-P_min)/(0.8f*16383) + P_min);
-          float diff_press_pa_raw = diff_press_PSI * PSI_to_Pa;
-          if(calibration_counter > calibration_count)
-          {
-              diff_press_pa_raw -= _diff_pres_offset;
-              sensor_msgs::FluidPressure pressure_msg;
-              pressure_msg.fluid_pressure = diff_press_pa_raw;
-              Airspeed_publisher_.publish(pressure_msg);
-              //ROS_INFO_STREAM("AIRSPEED = " << sqrt(2/1.15*diff_press_pa_raw) << " pressure " << diff_press_pa_raw);
-          }
-          else if(calibration_counter == calibration_count)
-          {
-              _diff_pres_offset = _diff_pres_offset/calibration_count;
-              calibration_counter++;
-          }
-          else
-          {
-              _diff_pres_offset += diff_press_pa_raw;
-              calibration_counter++;
-          }
+        diff_press_pa_raw -= _diff_pres_offset;
+        sensor_msgs::FluidPressure pressure_msg;
+        pressure_msg.fluid_pressure = diff_press_pa_raw;
+        Airspeed_publisher_.publish(pressure_msg);
+        //ROS_INFO_STREAM("AIRSPEED = " << sqrt(2/1.15*diff_press_pa_raw) << " pressure " << diff_press_pa_raw);
       }
+      else if(calibration_counter == calibration_count)
+      {
+        _diff_pres_offset = _diff_pres_offset/calibration_count;
+        calibration_counter++;
+      }
+      else
+      {
+        _diff_pres_offset += diff_press_pa_raw;
+        calibration_counter++;
+      }
+    }
   } else{
-        ROS_ERROR_STREAM("Airspeed receive error");
+    ROS_ERROR_STREAM("Airspeed receive error");
   }
 }
 
@@ -236,12 +231,12 @@ void fcuIO::altCallback(const ros::TimerEvent& event)
   bool received = MSP_->getAltitude(receivedAltdata);
 
   if(received){
-      std_msgs::Float32 alt;
-      alt.data = receivedAltdata.estAlt/100.0;
-      Baro_alt_publisher_.publish(alt);
-//      ROS_INFO_STREAM("ALT = " << receivedAltdata.estAlt << " VARIO = " << receivedAltdata.vario);
+    std_msgs::Float32 alt;
+    alt.data = receivedAltdata.estAlt/100.0;
+    Baro_alt_publisher_.publish(alt);
+    //      ROS_INFO_STREAM("ALT = " << receivedAltdata.estAlt << " VARIO = " << receivedAltdata.vario);
   } else{
-        ROS_ERROR_STREAM("ALT receive error");
+    ROS_ERROR_STREAM("ALT receive error");
   }
 }
 
@@ -253,17 +248,17 @@ void fcuIO::sonarCallback(const ros::TimerEvent& event)
   bool received = MSP_->getSonar(receivedSdata);
 
   if(received && receivedSdata.distance > 2 && receivedSdata.distance < 400){
-      sensor_msgs::Range dist;
-      //dist.header.stamp.now();
-      dist.min_range = 0.02;
-      dist.max_range = 4;
-      dist.radiation_type = dist.ULTRASOUND;
-      dist.field_of_view = 15*M_PI/180.0;
-      dist.range = receivedSdata.distance/100.0;
-      Sonar_publisher_.publish(dist);
-//      ROS_INFO_STREAM("SONAR = " << receivedSdata.distance);
+    sensor_msgs::Range dist;
+    //dist.header.stamp.now();
+    dist.min_range = 0.02;
+    dist.max_range = 4;
+    dist.radiation_type = dist.ULTRASOUND;
+    dist.field_of_view = 15*M_PI/180.0;
+    dist.range = receivedSdata.distance/100.0;
+    Sonar_publisher_.publish(dist);
+    //      ROS_INFO_STREAM("SONAR = " << receivedSdata.distance);
   } else{
-        ROS_ERROR_STREAM("Sonar receive error");
+    ROS_ERROR_STREAM("Sonar receive error");
   }
 }
 
@@ -300,8 +295,8 @@ bool fcuIO::calibrateRC()
     success = MSP_->getRC(read_rc_commands);
     if(success){
       for(int j=0; j<4; j++){
-          max_PWM_received[j] = (uint16_t)(max_PWM_received[j] > read_rc_commands.rcData[j]) ? max_PWM_received[j] : read_rc_commands.rcData[j];
-          min_PWM_received[j] = (uint16_t)(min_PWM_received[j] < read_rc_commands.rcData[j]) ? min_PWM_received[j] : read_rc_commands.rcData[j];
+        max_PWM_received[j] = (uint16_t)(max_PWM_received[j] > read_rc_commands.rcData[j]) ? max_PWM_received[j] : read_rc_commands.rcData[j];
+        min_PWM_received[j] = (uint16_t)(min_PWM_received[j] < read_rc_commands.rcData[j]) ? min_PWM_received[j] : read_rc_commands.rcData[j];
       }
     }else{
       ROS_ERROR("Serial Read Error");
@@ -325,8 +320,12 @@ bool fcuIO::sendRC()
   for(int i=0; i<8; i++){
     outgoing_rc_commands.rcData[i] = rc_commands_[i];
   }
-  return MSP_->setRawRC(outgoing_rc_commands);
-  //return getRC();
+  if(echo_rc_data_){
+    MSP_->setRawRC(outgoing_rc_commands);
+    return getRC();
+  }else{
+    return MSP_->setRawRC(outgoing_rc_commands);
+  }
 }
 
 
@@ -417,13 +416,13 @@ bool fcuIO::getImu()
     Imu_.header.stamp = ros::Time::now();
     Imu_publisher_.publish(Imu_);
 
-    sensor_msgs::MagneticField mag;
-    mag.magnetic_field.x = receivedIMUdata.magx;
-    mag.magnetic_field.y = receivedIMUdata.magy;
-    mag.magnetic_field.z = receivedIMUdata.magz;
-    if(have_mag_)
-        Mag_publisher_.publish(mag);
-    //ROS_INFO_STREAM(receivedIMUdata.magx << " " << receivedIMUdata.magy << " " << receivedIMUdata.magz);
+    if(have_mag_){
+      sensor_msgs::MagneticField mag;
+      mag.magnetic_field.x = receivedIMUdata.magx;
+      mag.magnetic_field.y = receivedIMUdata.magy;
+      mag.magnetic_field.z = receivedIMUdata.magz;
+      Mag_publisher_.publish(mag);
+    }
 
     return true;
   } else{
@@ -440,10 +439,10 @@ bool fcuIO::getAS()
 
   if(received){
     //if(receivedASdata.airspeed != 0)
-        ROS_INFO_STREAM("AIRSPEED = " << receivedASdata.airspeed << " TEMP = " << receivedASdata.temp);
+    ROS_INFO_STREAM("AIRSPEED = " << receivedASdata.airspeed << " TEMP = " << receivedASdata.temp);
     return true;
   } else{
-        ROS_INFO_STREAM("nothing");
+    ROS_INFO_STREAM("nothing");
     return false;
   }
 }

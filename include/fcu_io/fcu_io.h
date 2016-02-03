@@ -106,6 +106,7 @@ private:
   double max_yaw_rate_;
   double max_throttle_;
   bool get_imu_attitude_;
+  bool echo_rc_data_;
 
   // Local Variables
   std::vector<uint16_t> rc_commands_;
@@ -115,7 +116,6 @@ private:
   sensor_msgs::Imu Imu_;
   MSP* MSP_;
   std::vector<PIDitem> PIDs_;
-  bool armed_;
   bool acro_;
   bool have_mag_;
 

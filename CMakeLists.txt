@@ -1,16 +1,14 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(fcu_io)
 
-find_package(catkin REQUIRED COMPONENTS
+find_package(catkin REQUIRED
   sensor_msgs
   std_msgs
   roscpp
   rospy
-  std_msgs
   cmake_modules
   dynamic_reconfigure
   tf
-  message_generation
 )
 
 add_message_files(
@@ -29,19 +27,16 @@ generate_dynamic_reconfigure_options(
 )
 
 catkin_package(
-    LIBRARIES ${PROJECT_NAME}
     INCLUDE_DIRS include
     DEPENDS rt pthread dynamic_reconfigure
-    CATKIN_DEPENDS message_runtime
+    CATKIN_DEPENDS message_runtime roscpp rospy std_msgs
+    LIBRARIES fcu_io
 )
 
 ###########
 ## Build ##
 ###########
-include_directories(include)
-include_directories(
-  ${catkin_INCLUDE_DIRS}
-)
+include_directories(include  ${catkin_INCLUDE_DIRS} )
 include_directories(${dynamic_reconfigure_PACKAGE_PATH}/cmake/cfgbuild.cmake)
 
 ## Declare a cpp library
@@ -69,6 +64,6 @@ add_executable(fcu_io_node
 add_dependencies(fcu_io_node fcu_io_generate_messages_cpp)
 add_dependencies(fcu_io_node serial_lib)
 
-target_link_libraries(fcu_io_node serial_lib
-  ${catkin_LIBRARIES}
-)
+target_link_libraries(fcu_io_node serial_lib ${catkin_LIBRARIES})
+
+

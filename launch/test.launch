@@ -10,11 +10,13 @@
                     timeout: 1,
                     enable_GPS: false,
                     baudrate: 115200,
-                    get_imu_attitude: true }
+                    get_imu_attitude: true,
+                    echo_rc_data: false }
 
  </rosparam>  
 
  <node name="xbox"                pkg="joy"                 type="joy_node"/>
+ <node name="rc_joy" 						pkg="ros_copter"							type="rc_joy"/>
  <rosparam command="load" file="$(find fcu_io)/param/rc.yaml"/>
  <node name="naze"                pkg="fcu_io"            type="fcu_io_node" output="screen">
  	<param name="serial_port" value="/dev/ttyUSB0"/>
