@@ -12,8 +12,6 @@
 #include <std_msgs/Float32.h>
 #include <std_msgs/Bool.h>
 #include <tf/tf.h>
-#include <naze_ros/Command.h>
-#include <naze_ros/GPS.h>
 
 #include "serial/msp.h"
 #include "serial/mspdata.h"
