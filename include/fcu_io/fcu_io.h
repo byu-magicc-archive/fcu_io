@@ -2,7 +2,7 @@
 #define FCU_IO_H
 
 #include <ros/ros.h>
-#include <fcu_io/Command.h>
+#include <fcu_common/Command.h>
 #include <fcu_io/GainConfig.h>
 #include <dynamic_reconfigure/server.h>
 #include <sensor_msgs/Imu.h>
@@ -65,7 +65,7 @@ public:
   void asCallback(const ros::TimerEvent& event);
   void altCallback(const ros::TimerEvent& event);
   void sonarCallback(const ros::TimerEvent& event);
-  void RPYCallback(const fcu_io::CommandConstPtr &msg);
+  void RPYCallback(const fcu_common::CommandConstPtr &msg);
   void calibrationCallback(const std_msgs::BoolConstPtr &msg);
   void gpsCallback(const ros::TimerEvent& event);
 

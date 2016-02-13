@@ -125,7 +125,7 @@ void fcuIO::calibrationCallback(const std_msgs::BoolConstPtr &msg)
 }
 
 
-void fcuIO::RPYCallback(const fcu_io::CommandConstPtr &msg)
+void fcuIO::RPYCallback(const fcu_common::CommandConstPtr &msg)
 {
   int aux1(0.0), aux2(0.0), aux3(0.0), aux4(0.0);
   double command[4] = {0.0, 0.0, 0.0, 0.0};
