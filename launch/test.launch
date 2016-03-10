@@ -10,7 +10,7 @@
                     timeout: 1,
                     enable_GPS: false,
                     baudrate: 115200,
-                    get_imu_attitude: true,
+                    get_imu_attitude: false,
                     echo_rc_data: false }
 
  </rosparam>  
