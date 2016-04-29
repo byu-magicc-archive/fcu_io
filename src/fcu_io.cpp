@@ -1,31 +1,62 @@
 #include "fcu_io/fcu_io.h"
+#include "sstream"
+#include "iostream"
 
 namespace fcu_io
 {
 
 fcuIO::fcuIO() :
-  nh_(ros::NodeHandle()),
+  nh_(ros::NodeHandle("/")),
   nh_private_(ros::NodeHandle("~")),
   have_mag_(false)
 {
   // retrieve params
   double imu_pub_rate, rc_send_rate, dtimeout;
+  double mag_pub_rate, baro_pub_rate, airspeed_pub_rate, sonar_pub_rate;
   std::string serial_port, imu_frame_id;
   int baudrate;
-  bool enable_GPS, useRNcallback;
+
+  // Get Robot namespace
+  std::string robot_namespace;
+  nh_private_.param<std::string>("robot_namespace", robot_namespace, "");
+  ros::NodeHandle robot_nh(robot_namespace.c_str());
+
+  // General Parameters
+  robot_nh.param<double>("mass", mass_, 3.16);
+  robot_nh.param<double>("max_roll", max_commanded_roll_, 25.0*M_PI/180.0);
+  robot_nh.param<double>("max_pitch", max_commanded_pitch_, 25.0*M_PI/180.0);
+  robot_nh.param<double>("max_yaw_rate", max_commanded_yaw_rate_, M_PI);
+  robot_nh.param<double>("max_thrust", max_commanded_thrust_, 74.0);
+
+  // RC Scaling Parameters
   nh_private_.param<int>("min_PWM_output", min_PWM_output_, 1000);
   nh_private_.param<int>("max_PWM_output", max_PWM_output_, 2000);
-  nh_private_.param<double>("max_roll", max_roll_, 25.0*M_PI/180.0);
-  nh_private_.param<double>("max_pitch", max_pitch_, 25.0*M_PI/180.0);
-  nh_private_.param<double>("max_yaw_rate", max_yaw_rate_, M_PI);
-  nh_private_.param<double>("max_thrust", max_throttle_, 74.0);
-  nh_private_.param<std::string>("imu_frame_id", imu_frame_id, "shredder/base/Imu");
-  nh_private_.param<double>("imu_pub_rate", imu_pub_rate, 250.0);
-  nh_private_.param<double>("rc_send_rate", rc_send_rate, 50.0);
-  nh_private_.param<std::string>("serial_port", serial_port, "/dev/ttyUSB0");
+  nh_private_.param<double>("extents/roll", roll_limit_, 2000);
+  nh_private_.param<double>("extents/pitch", pitch_limit_, 2000);
+  nh_private_.param<double>("extents/yaw_rate", yaw_rate_limit_, 2000);
+  nh_private_.param<double>("extents/thrust", thrust_limit_, 2000);
+
+  // Serial Port Parameters
+  nh_private_.param<std::string>("serial_port", serial_port, "/dev/ttyUSB1");
   nh_private_.param<int>("baudrate", baudrate, 115200);
-  nh_private_.param<double>("timeout", dtimeout, 2);
-  nh_private_.param<bool>("get_imu_attitude", get_imu_attitude_, true);
+  nh_private_.param<double>("timeout", dtimeout, 1);
+
+  // Sensor Publishing Stuff
+  std::stringstream frame_id_ss;
+  frame_id_ss << robot_namespace<< "/base/Imu";
+  nh_private_.param<std::string>("imu_frame_id", imu_frame_id, frame_id_ss.str().c_str());
+  nh_private_.param<double>("imu_pub_rate", imu_pub_rate, 100.0);
+  nh_private_.param<double>("rc_send_rate", rc_send_rate, 50.0);
+  nh_private_.param<double>("mag_pub_rate", mag_pub_rate, 20.0);
+  nh_private_.param<double>("airspeed_pub_rate", airspeed_pub_rate, 20.0);
+  nh_private_.param<double>("baro_pub_rate", baro_pub_rate, 20.0);
+  nh_private_.param<double>("sonar_pub_rate", sonar_pub_rate, 20.0);
+
+  ROS_INFO_STREAM("mag pub = " << mag_pub_rate);
+  ROS_INFO_STREAM("imu pub = " << imu_pub_rate);
+
+
+  nh_private_.param<bool>("get_imu_attitude", get_imu_attitude_, false);
   nh_private_.param<bool>("echo_rc_data", echo_rc_data_, false);
 
   // connect serial port
@@ -33,6 +64,7 @@ fcuIO::fcuIO() :
   timeout.inter_byte_timeout = serial::Timeout::max();
   timeout.read_timeout_constant = 1;
   timeout.write_timeout_constant = 2;
+  ROS_INFO_STREAM("Connecting to Naze on " << serial_port << " at " << baudrate << " baud");
   MSP_ = new MSP(serial_port, (u_int32_t)baudrate, timeout);
 
   uint16_t sensors;
@@ -43,14 +75,18 @@ fcuIO::fcuIO() :
   // Set up Callbacks and publishers if sensors are present
   Command_subscriber_ = nh_.subscribe("command", 1, &fcuIO::RPYCallback, this);
   RC_calibration_subscriber_ = nh_.subscribe("calibrate", 1, &fcuIO::calibrationCallback, this);
-  rc_send_timer_ = nh_.createTimer(ros::Duration(1.0/rc_send_rate), &fcuIO::rcCallback, this);
+
+  if(rc_send_rate > 0){
+    rc_send_timer_ = nh_.createTimer(ros::Duration(1.0/rc_send_rate), &fcuIO::rcCallback, this);
+  }
 
   if(sensors & SENSOR_ACC)
   {
     ROS_INFO("found IMU - Calibrating");
     ROS_ASSERT(calibrateIMU());
     ROS_INFO("IMU calibration successful");
-
+  }
+  if(imu_pub_rate >0){
     //initialize constant message members
     Imu_.header.frame_id = imu_frame_id;
     boost::array<double,9> lin_covariance = { {0.0004, 0.0, 0.0,    // accel noise is 400 ug's
@@ -65,28 +101,29 @@ fcuIO::fcuIO() :
     imu_pub_timer_ = nh_.createTimer(ros::Duration(1.0/imu_pub_rate), &fcuIO::imuCallback, this);
     Imu_publisher_ = nh_.advertise<sensor_msgs::Imu>("imu/data", 1);
   }
-  if(sensors & SENSOR_MAG)
+
+  if((sensors & SENSOR_MAG) && mag_pub_rate > 0.0)
   {
+    have_mag_ = true; // magnetometer comes in with IMU
     ROS_INFO("Found Magnetometer");
-    have_mag_ = true;
     Mag_publisher_ = nh_.advertise<sensor_msgs::MagneticField>("mag/data", 1);
   }
-  if(sensors & SENSOR_AIRSPEED)
+  if((sensors & SENSOR_AIRSPEED) && airspeed_pub_rate > 0.0)
   {
     ROS_INFO("Found Airspeed");
-    as_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::asCallback, this);
+    as_pub_timer_ = nh_.createTimer(ros::Duration(1.0/airspeed_pub_rate), &fcuIO::asCallback, this);
     Airspeed_publisher_ = nh_.advertise<sensor_msgs::FluidPressure>("airspeed/data", 1);
   }
-  if(sensors & SENSOR_BARO)
+  if((sensors & SENSOR_BARO) && baro_pub_rate > 0.0)
   {
     ROS_INFO("Found Altimeter");
-    alt_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::altCallback, this);
+    alt_pub_timer_ = nh_.createTimer(ros::Duration(1.0/baro_pub_rate), &fcuIO::altCallback, this);
     Baro_alt_publisher_ = nh_.advertise<std_msgs::Float32>("baro/alt",1);
   }
-  if(sensors & SENSOR_SONAR)
+  if((sensors & SENSOR_SONAR) && sonar_pub_rate > 0.0)
   {
     ROS_INFO("Found Sonar");
-    sonar_pub_timer_ = nh_.createTimer(ros::Duration(0.05), &fcuIO::sonarCallback, this);
+    sonar_pub_timer_ = nh_.createTimer(ros::Duration(1.0/sonar_pub_rate), &fcuIO::sonarCallback, this);
     Sonar_publisher_ = nh_.advertise<sensor_msgs::Range>("sonar/data", 1);
   }
 
@@ -130,12 +167,13 @@ void fcuIO::RPYCallback(const fcu_common::CommandConstPtr &msg)
   int aux1(0.0), aux2(0.0), aux3(0.0), aux4(0.0);
   double command[4] = {0.0, 0.0, 0.0, 0.0};
   uint16_t PWM_range;
-  command[RC_AIL] = msg->normalized_roll;
-  command[RC_ELE] = msg->normalized_pitch;
-  command[RC_THR] = msg->normalized_throttle;
-  command[RC_RUD] = msg->normalized_yaw;
+  command[RC_AIL] = msg->normalized_roll*max_commanded_roll_/roll_limit_;
+  command[RC_ELE] = msg->normalized_pitch*max_commanded_pitch_/pitch_limit_;
+  command[RC_THR] = msg->normalized_throttle*max_commanded_yaw_rate_/yaw_rate_limit_;
+  command[RC_RUD] = msg->normalized_yaw*max_commanded_thrust_/thrust_limit_;
 
-  for(int i=0; i<8; i++){
+  std::cout << "rc_commands_ = "<< std::endl;
+  for(int i=0; i<4; i++){
     if(i == RC_AIL || i == RC_RUD){
       PWM_range = (max_sticks_[i] - min_sticks_[i])/2;
       rc_commands_[i] = (uint16_t)sat((int)round(command[i]*PWM_range+center_sticks_[i]),min_sticks_[i], max_sticks_[i]);
@@ -148,7 +186,9 @@ void fcuIO::RPYCallback(const fcu_common::CommandConstPtr &msg)
     }else if(i == RC_ACRO){
       rc_commands_[RC_ACRO] = acro_?max_PWM_output_:min_PWM_output_;
     }
+    std::cout << command[i] << " -> " << rc_commands_[i] << std::endl;
   }
+
 }
 
 
@@ -304,12 +344,17 @@ bool fcuIO::calibrateRC()
     }
     usleep(20000);
   }
-  ROS_WARN("Saving Maximum and Minimum Data");
   for(int i=0; i<4; i++){
     max_sticks_[i] = max_PWM_received[i];
     min_sticks_[i] = min_PWM_received[i];
-    ROS_INFO_STREAM("channel " << i << ": max = " << max_sticks_[i] << " center = " << center_sticks_[i] << " min = " << min_sticks_[i]);
   }
+  ROS_WARN("Saving Maximum and Minimum Data, replace yaml file if desired");
+  std::cout << "\n\n\n";
+  std::cout << "rc: { roll: { max: " << max_sticks_[RC_AIL] << ", \n\t\tcenter: " << center_sticks_[RC_AIL] << ", \n\t\tmin: " << min_sticks_[RC_AIL] << "\n\t\t},\n";
+  std::cout << "\t pitch: { max: " << max_sticks_[RC_ELE] << ", \n\t\tcenter: " << center_sticks_[RC_ELE] << ", \n\t\tmin: " << min_sticks_[RC_ELE] << "\n\t\t},\n";
+  std::cout << "\t yaw: { max: " << max_sticks_[RC_RUD] << ", \n\t\tcenter: " << center_sticks_[RC_RUD] << ", \n\t\tmin: " << min_sticks_[RC_RUD] << "\n\t\t},\n";
+  std::cout << "\t thrust: { max: " << max_sticks_[RC_THR] << ", \n\t\tcenter: " << center_sticks_[RC_THR] << ", \n\t\tmin: " << min_sticks_[RC_THR] << "\n\t\t},\n";
+  std::cout << "\t}\n\n";
   return true;
 }
 
@@ -329,7 +374,7 @@ bool fcuIO::sendRC()
 }
 
 
-bool fcuIO::setPID(PIDitem roll, PIDitem pitch, PIDitem yaw)
+bool fcuIO::setPID(PIDitem roll, PIDitem pitch, PIDitem yaw, PIDitem level)
 {
   SetPID outgoing_PID_command;
   for(int i = 0; i<10; i++){
@@ -345,6 +390,8 @@ bool fcuIO::setPID(PIDitem roll, PIDitem pitch, PIDitem yaw)
       outgoing_PID_command.PIDs[YAW].P = (uint8_t)(yaw.P*10);
       outgoing_PID_command.PIDs[YAW].I = (uint8_t)(yaw.I*1000);
       outgoing_PID_command.PIDs[YAW].D = (uint8_t)(yaw.D*1);
+    }else if (i == LEVEL){
+      outgoing_PID_command.PIDs[LEVEL].P = (uint8_t)(level.P*10);
     }else{
       outgoing_PID_command.PIDs[i].P = (uint8_t)(PIDs_[i].P*10);
       outgoing_PID_command.PIDs[i].I = (uint8_t)(PIDs_[i].I*1000);
@@ -416,12 +463,14 @@ bool fcuIO::getImu()
     Imu_.header.stamp = ros::Time::now();
     Imu_publisher_.publish(Imu_);
 
+
     if(have_mag_){
       sensor_msgs::MagneticField mag;
       mag.magnetic_field.x = receivedIMUdata.magx;
       mag.magnetic_field.y = receivedIMUdata.magy;
       mag.magnetic_field.z = receivedIMUdata.magz;
       Mag_publisher_.publish(mag);
+      ROS_INFO("getting mag");
     }
 
     return true;
@@ -461,6 +510,7 @@ bool fcuIO::getPID(){
     ROS_INFO_STREAM("Gains received: Roll = " <<  PIDs_[ROLL].P << ", "  << PIDs_[ROLL].I << ", " <<  PIDs_[ROLL].D);
     ROS_INFO_STREAM("Gains received: PITCH = " <<  PIDs_[PITCH].P << ", "  << PIDs_[PITCH].I << ", " <<  PIDs_[PITCH].D);
     ROS_INFO_STREAM("Gains received: YAW = " <<  PIDs_[YAW].P << ", "  << PIDs_[YAW].I << ", " <<  PIDs_[YAW].D);
+    ROS_INFO_STREAM("Gains received: LEVEL = " <<  PIDs_[LEVEL].P << ", "  << PIDs_[LEVEL].I << ", " <<  PIDs_[LEVEL].D);
     return true;
   } else {
     return false;
@@ -473,20 +523,20 @@ bool fcuIO::loadRCFromParam()
   int max_ail, max_ele, max_rud, max_thr;
   int min_ail, min_ele, min_rud, min_thr;
   int mid_ail, mid_ele, mid_rud, mid_thr;
-  nh_private_.param<int>("roll/max",  max_ail, 2000);
-  nh_private_.param<int>("pitch/max", max_ele, 2000);
-  nh_private_.param<int>("yaw/max",   max_rud, 2000);
-  nh_private_.param<int>("thrust/max",max_thr, 2000);
+  nh_private_.param<int>("rc/roll/max",  max_ail, 2000);
+  nh_private_.param<int>("rc/pitch/max", max_ele, 2000);
+  nh_private_.param<int>("rc/yaw/max",   max_rud, 2000);
+  nh_private_.param<int>("rc/thrust/max",max_thr, 2000);
 
-  nh_private_.param<int>("roll/min",   min_ail, 1000);
-  nh_private_.param<int>("pitch/min",  min_ele, 1000);
-  nh_private_.param<int>("yaw/min",    min_rud, 1000);
-  nh_private_.param<int>("thrust/min", min_thr, 1000);
+  nh_private_.param<int>("rc/roll/min",   min_ail, 1000);
+  nh_private_.param<int>("rc/pitch/min",  min_ele, 1000);
+  nh_private_.param<int>("rc/yaw/min",    min_rud, 1000);
+  nh_private_.param<int>("rc/thrust/min", min_thr, 1000);
 
-  nh_private_.param<int>("roll/center",   mid_ail, 1500);
-  nh_private_.param<int>("pitch/center",  mid_ele, 1500);
-  nh_private_.param<int>("yaw/center",    mid_rud, 1500);
-  nh_private_.param<int>("thrust/center", mid_thr, 1500);
+  nh_private_.param<int>("rc/roll/center",   mid_ail, 1500);
+  nh_private_.param<int>("rc/pitch/center",  mid_ele, 1500);
+  nh_private_.param<int>("rc/yaw/center",    mid_rud, 1500);
+  nh_private_.param<int>("rc/thrust/center", mid_thr, 1500);
 
   max_sticks_[RC_AIL] = max_ail;
   max_sticks_[RC_ELE] = max_ele;
@@ -514,7 +564,7 @@ bool fcuIO::loadRCFromParam()
 
 void fcuIO::gainCallback(fcu_io::GainConfig &config, uint32_t level)
 {
-  PIDitem new_roll, new_pitch, new_yaw;
+  PIDitem new_roll, new_pitch, new_yaw, new_level;
   new_roll.P = config.rollP;
   new_roll.I = config.rollI;
   new_roll.D = config.rollD;
@@ -524,8 +574,11 @@ void fcuIO::gainCallback(fcu_io::GainConfig &config, uint32_t level)
   new_yaw.P = config.yawP;
   new_yaw.I = config.yawI;
   new_yaw.D = config.yawD;
-  setPID(new_roll, new_pitch, new_yaw);
-  ROS_INFO("new gains");
+  new_level.P = config.levelP;
+  new_level.I = config.levelI;
+  new_level.D = config.levelD;
+  setPID(new_roll, new_pitch, new_yaw, new_level);
+  ROS_INFO("set new gains");
   return;
 }
 
@@ -539,7 +592,6 @@ int fcuIO::sat(int input, int min, int max){
   }
   return output;
 }
-
 
 
 } // namespace fcu_io
