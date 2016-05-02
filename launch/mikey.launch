@@ -1,0 +1,27 @@
+<launch>
+ 
+  <arg name="mav_name" default="hummingbird"/>
+
+ <rosparam subst_value="True">
+  xbox:           { deadzone: 0.15,
+                    autorepeat_rate: 10}
+  naze:           { imu_pub_rate: 250.0,
+                    rc_send_rate: 1.0,
+                    timeout: 1,
+                    enable_GPS: false,
+                    baudrate: 115200,
+                    get_imu_attitude: false,
+                    echo_rc_data: false }
+
+ </rosparam>  
+
+ <node name="xbox"                pkg="joy"                 type="joy_node"/>
+ <node name="rc_joy" 						pkg="ros_copter"							type="rc_joy"/>
+ <rosparam command="load" file="$(find fcu_io)/param/rc.yaml"/>
+ <node name="naze"                pkg="fcu_io"            type="fcu_io_node" output="screen">
+ 	<param name="serial_port" value="/dev/ttyUSB0"/>
+ </node>
+
+</launch>
+
+
