@@ -17,10 +17,10 @@
 #include "serial/mspdata.h"
 
 // RC channels
-#define RC_AIL 0
-#define RC_ELE 1
-#define RC_RUD 2
-#define RC_THR 3
+#define RC_THR 0
+#define RC_AIL 1
+#define RC_ELE 2
+#define RC_RUD 3
 #define RC_AUX1 4
 #define RC_AUX2 5
 #define RC_ARM 6

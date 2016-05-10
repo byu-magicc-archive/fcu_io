@@ -1,6 +1,7 @@
 #include "fcu_io/fcu_io.h"
 #include "sstream"
 #include "iostream"
+#include <fstream>
 
 namespace fcu_io
 {
@@ -51,9 +52,6 @@ fcuIO::fcuIO() :
   nh_private_.param<double>("airspeed_pub_rate", airspeed_pub_rate, 20.0);
   nh_private_.param<double>("baro_pub_rate", baro_pub_rate, 20.0);
   nh_private_.param<double>("sonar_pub_rate", sonar_pub_rate, 20.0);
-
-  ROS_INFO_STREAM("mag pub = " << mag_pub_rate);
-  ROS_INFO_STREAM("imu pub = " << imu_pub_rate);
 
 
   nh_private_.param<bool>("get_imu_attitude", get_imu_attitude_, false);
@@ -116,11 +114,11 @@ fcuIO::fcuIO() :
   }
   if((sensors & SENSOR_BARO) && baro_pub_rate > 0.0)
   {
-    ROS_INFO("Found Altimeter");
+    ROS_INFO("Found Barometer");
     alt_pub_timer_ = nh_.createTimer(ros::Duration(1.0/baro_pub_rate), &fcuIO::altCallback, this);
     Baro_alt_publisher_ = nh_.advertise<std_msgs::Float32>("baro/alt",1);
   }
-  if((sensors & SENSOR_SONAR) && sonar_pub_rate > 0.0)
+  if((sensors & SENSOR_SONAR))
   {
     ROS_INFO("Found Sonar");
     sonar_pub_timer_ = nh_.createTimer(ros::Duration(1.0/sonar_pub_rate), &fcuIO::sonarCallback, this);
@@ -142,7 +140,7 @@ fcuIO::fcuIO() :
   func_ = boost::bind(&fcuIO::gainCallback, this, _1, _2);
   server_.setCallback(func_);
 
-  ROS_INFO("finished initialization");
+  ROS_INFO("fcu_io finished initialization");
 }
 
 
@@ -169,10 +167,9 @@ void fcuIO::RPYCallback(const fcu_common::CommandConstPtr &msg)
   uint16_t PWM_range;
   command[RC_AIL] = msg->normalized_roll*max_commanded_roll_/roll_limit_;
   command[RC_ELE] = msg->normalized_pitch*max_commanded_pitch_/pitch_limit_;
-  command[RC_THR] = msg->normalized_throttle*max_commanded_yaw_rate_/yaw_rate_limit_;
-  command[RC_RUD] = msg->normalized_yaw*max_commanded_thrust_/thrust_limit_;
+  command[RC_THR] = msg->normalized_throttle*max_commanded_thrust_/thrust_limit_;
+  command[RC_RUD] = msg->normalized_yaw*max_commanded_yaw_rate_/yaw_rate_limit_;
 
-  std::cout << "rc_commands_ = "<< std::endl;
   for(int i=0; i<4; i++){
     if(i == RC_AIL || i == RC_RUD){
       PWM_range = (max_sticks_[i] - min_sticks_[i])/2;
@@ -186,7 +183,6 @@ void fcuIO::RPYCallback(const fcu_common::CommandConstPtr &msg)
     }else if(i == RC_ACRO){
       rc_commands_[RC_ACRO] = acro_?max_PWM_output_:min_PWM_output_;
     }
-    std::cout << command[i] << " -> " << rc_commands_[i] << std::endl;
   }
 
 }
@@ -194,9 +190,15 @@ void fcuIO::RPYCallback(const fcu_common::CommandConstPtr &msg)
 
 void fcuIO::imuCallback(const ros::TimerEvent& event)
 {
+  static std::ofstream outfile("/home/capn/out.txt", std::ofstream::out);
   if(!getImu()){
     ROS_ERROR_STREAM("IMU receive error");
   }
+  uint16_t sensors;
+  int cycle_time;
+  int errors;
+  getStatus(sensors, cycle_time, errors);
+  outfile << cycle_time << "\n";
 }
 
 

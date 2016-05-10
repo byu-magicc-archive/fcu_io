@@ -6,8 +6,8 @@
 
     <rosparam subst_value="True">
       xbox:           { deadzone: 0.15,
-                        autorepeat_rate: 10}
-      fcu_io:         { imu_pub_rate: 0.0,
+                        autorepeat_rate: 50}
+      fcu_io:         { imu_pub_rate: 150.0,
                         rc_send_rate: 50.0,
                         serial_port: /dev/ttyUSB0 }
 
@@ -16,8 +16,8 @@
     <!-- load "robot globals" (mass, attitude extents, etc...) -->
 
 
-    <!-- <node name="xbox"                pkg="joy"                 type="joy_node"/> -->
-    <!-- <node name="rc_joy" 						pkg="ros_copter"							type="rc_joy"/> -->
+    <node name="xbox"     pkg="joy"           type="joy_node"/>
+    <node name="rc_joy" 	pkg="fcu_common"		type="fcu_common_joy"/>
 
     <!-- Load FCU parameters -->
     <rosparam command="load" file="$(find fcu_io)/param/$(arg mav_name).yaml"/>
