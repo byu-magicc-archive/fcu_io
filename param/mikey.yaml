@@ -18,7 +18,7 @@ fcu_io: { min_PWM_output: 1000,
           enable_GPS: false,
           baudrate: 115200,
           get_imu_attitude: false,
-          echo_rc_data: true,
+          echo_rc_data: false,
 
           extents: { roll: !degrees 50,
                      pitch: !degrees 50,

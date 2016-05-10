@@ -3,7 +3,6 @@
 
   <rosparam command="load" file="$(find relative_nav)/param/$(arg mav_name).yaml"/>
   <group ns="$(arg mav_name)">
-
     <rosparam subst_value="True">
       xbox:           { deadzone: 0.15,
                         autorepeat_rate: 50}
