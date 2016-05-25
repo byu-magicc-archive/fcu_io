@@ -1,27 +1,24 @@
 <launch>
- 
-  <arg name="mav_name" default="hummingbird"/>
+  <arg name="mav_name" default="mikey"/>
 
- <rosparam subst_value="True">
-  xbox:           { deadzone: 0.15,
-                    autorepeat_rate: 10}
-  naze:           { imu_pub_rate: 250.0,
-                    rc_send_rate: 50.0,
-                    timeout: 1,
-                    enable_GPS: false,
-                    baudrate: 115200,
-                    get_imu_attitude: false,
-                    echo_rc_data: false }
+  <rosparam command="load" file="$(find relative_nav)/param/$(arg mav_name).yaml"/>
+  <group ns="$(arg mav_name)">
+    <rosparam subst_value="True">
+      xbox:           { deadzone: 0.15,
+                        autorepeat_rate: 50}
+      fcu_io:         { imu_pub_rate: 150.0,
+                        rc_send_rate: 50.0,
+                        serial_port: /dev/ttyUSB0 }
+    </rosparam>
 
- </rosparam>  
+    <!-- load "robot globals" (mass, attitude extents, etc...) -->
 
- <node name="xbox"                pkg="joy"                 type="joy_node"/>
- <node name="rc_joy" 						pkg="ros_copter"							type="rc_joy"/>
- <rosparam command="load" file="$(find fcu_io)/param/rc.yaml"/>
- <node name="naze"                pkg="fcu_io"            type="fcu_io_node" output="screen">
- 	<param name="serial_port" value="/dev/ttyUSB0"/>
- </node>
 
+    <node name="xbox"     pkg="joy"           type="joy_node"/>
+    <node name="rc_joy" 	pkg="fcu_common"		type="fcu_common_joy"/>
+
+    <!-- Load FCU parameters -->
+    <rosparam command="load" file="$(find fcu_io)/param/$(arg mav_name).yaml"/>
+    <node name="fcu_io"                pkg="fcu_io"            type="fcu_io_node" output="screen"/>
+  </group>
 </launch>
-
-

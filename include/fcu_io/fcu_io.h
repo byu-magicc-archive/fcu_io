@@ -17,9 +17,9 @@
 #include "serial/mspdata.h"
 
 // RC channels
-#define RC_AIL 0
-#define RC_ELE 1
-#define RC_THR 2
+#define RC_THR 0
+#define RC_AIL 1
+#define RC_ELE 2
 #define RC_RUD 3
 #define RC_AUX1 4
 #define RC_AUX2 5
@@ -73,6 +73,7 @@ private:
 
   // Node handles, publishers, subscribers
   ros::NodeHandle nh_;         //!< public node handle for subscribing, publishing, etc.
+  ros::NodeHandle robot_nh_;   //!< node handle relative to the robot namespace for robot-specific global parameters
   ros::NodeHandle nh_private_; //!< private node handle for pulling parameter values from the parameter server
 
   // Publishers, Subscribers and Timers
@@ -99,12 +100,18 @@ private:
   // Parameters
   int min_PWM_output_;
   int max_PWM_output_;
-  double max_roll_;
-  double max_pitch_;
-  double max_yaw_rate_;
-  double max_throttle_;
+  double max_commanded_roll_;
+  double max_commanded_pitch_;
+  double max_commanded_yaw_rate_;
+  double max_commanded_thrust_;
+  double roll_limit_;
+  double pitch_limit_;
+  double yaw_rate_limit_;
+  double thrust_limit_;
   bool get_imu_attitude_;
   bool echo_rc_data_;
+  double mass_;
+  std::string robot_namespace_;
 
   // Local Variables
   std::vector<uint16_t> rc_commands_;
@@ -129,7 +136,7 @@ private:
   bool getGPS();
   bool getStatus(uint16_t &sensors, int &cycle_time, int &i2c_errors);
   void getAttitude(geometry_msgs::Quaternion &orientation);
-  bool setPID(PIDitem roll, PIDitem pitch, PIDitem yaw);
+  bool setPID(PIDitem roll, PIDitem pitch, PIDitem yaw, PIDitem level);
 
   int sat(int input, int min, int max);
 };
