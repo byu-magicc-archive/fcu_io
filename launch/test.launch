@@ -9,7 +9,6 @@
       fcu_io:         { imu_pub_rate: 150.0,
                         rc_send_rate: 50.0,
                         serial_port: /dev/ttyUSB0 }
-
     </rosparam>
 
     <!-- load "robot globals" (mass, attitude extents, etc...) -->

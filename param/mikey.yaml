@@ -37,5 +37,5 @@ fcu_io: { min_PWM_output: 1000,
                 thrust: { max: 2002,
                           center: 999,
                           min: 999 },
-          }
+             }
 }
